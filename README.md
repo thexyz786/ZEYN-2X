@@ -25,6 +25,10 @@ kind that enlarges trust with every transaction. That is what *barakat* names.
 | `04-trajectory-ledger.md` | Do | **Archival.** Superseded by `MASTER.md` §21 |
 | `05-capital-and-access.md` | Draw on | The four arms, interest-free capital, access log |
 | `06-source-map.md` | Provenance | What was read, what was blocked, intake queue |
+| `10-gifting-doctrine-test.md` | Test | The base pointed at the gifting venture: rule named per decision, standing rules G1–G8, gaps exposed |
+| `11-gifting-research.md` | Evidence | Research register: US market, LA/SBA resources, US legal and tax, Vizag/India, go-to-market, campus fork. Fact / assumption / recommendation kept separate |
+| `12-gifting-layout.md` | Design | The operating layout v0: offer, buyers, channels, money flow, legal stack, calendar, gates and kill criteria |
+| `13-open-questions.md` | Decide | Tier 1 blocking questions and Tier 2 sharpening questions; answered questions become the decision log |
 
 ## How to use them
 
@@ -55,3 +59,13 @@ Two registers are meant to be written in, and both are still empty — correctly
 
 The trajectory ledger moved to `MASTER.md` §21 on 2 Sep 2026 so there is one
 living file. `04` here is kept for the trail.
+
+## The gifting venture — registers 10–13 (opened 2 September 2026)
+
+The first venture run against this base. `10` applies the doctrine test to it
+and derives standing rules **G1–G8**. `11` is the evidence. `12` is the
+layout. `13` is what the operator must decide before the layout is final.
+Read them in that order.
+
+**Known gap, stated 2 Sep 2026:** `MASTER.md` is cited across this repo and is
+not in it. The gates in `12` are provisional until it is added.
