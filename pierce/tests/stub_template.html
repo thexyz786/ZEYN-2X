@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- TEST DOUBLE - NOT the real dashboard-template.html. Do not ship this.
+     Exists only to prove the stage-4 injection marker works and that the
+     injected data.json is syntactically valid JS. The real renderer is the
+     project's own file and is not in this repo. -->
+<meta charset="utf-8"><title>Pierce Daily (stub renderer)</title>
+<body style="font:14px/1.5 -apple-system,system-ui,sans-serif;margin:2rem;max-width:52rem">
+<h1>Pierce Daily &mdash; stub renderer</h1>
+<p style="background:#fee;padding:.6rem;border-left:3px solid #c00">
+This is the <b>test</b> template, not the real dashboard.</p>
+<div id="out"></div>
+<script>
+const DATA = /*__DATA__*/;
+const el = document.getElementById('out');
+const rows = (DATA.courses||[]).map(c => {
+  const p = (DATA.pacing||{})[c.key] || {};
+  return `<tr><td>${c.key}</td><td>${p.verdict||'-'}</td><td>${p.missing||0}</td>
+          <td>${p.next7||0}</td><td>${p.remaining||0}</td></tr>`;
+}).join('');
+el.innerHTML = `<p>built ${DATA.meta.built_at} &middot; ${DATA.items.length} items
+  &middot; ${(DATA.delta||{}).merged||0} merged</p>
+  <table border=1 cellpadding=6 style="border-collapse:collapse">
+  <tr><th>course<th>verdict<th>missing<th>next 7d<th>remaining</tr>${rows}</table>`;
+</script>
+</body>
