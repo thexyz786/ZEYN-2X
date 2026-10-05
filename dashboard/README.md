@@ -53,6 +53,16 @@ Three properties follow from that shape:
   so the edition is on file by 07:30; a run takes several minutes.
 - **Pause:** disable the routine. The page keeps working on the archive.
 
+## Source policy
+
+The routine prompt carries an explicit allowlist (wires and primary
+documents first, then Al Jazeera English and other international broadsheets
+and public broadcasters, then regional and Los Angeles outlets) and a
+blocklist of partisan cable, tabloid and state-propaganda outlets. State-funded
+outlets are used freely except on their funder's own government, where a
+second independent source is required. Edit the list in `routine-prompt.md`
+and mirror it in the routine.
+
 ## Freshness signal
 
 The pill in the masthead reads the newest edition's timestamp:

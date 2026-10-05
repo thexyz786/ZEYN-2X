@@ -38,14 +38,42 @@ exists, stop and do nothing.
 ## 2. Research
 
 Use WebSearch extensively (no fewer than 15 searches) and WebFetch where a
-page needs reading. Credible sources only: Reuters, AP, Bloomberg, Financial
-Times, Wall Street Journal, The Economist, BBC, NPR, Al Jazeera, The Hindu,
-Dawn, Gulf News, Arab News, Los Angeles Times, LAist, CalMatters, official
-releases (whitehouse.gov, congress.gov, federalreserve.gov, sec.gov, ftc.gov,
-ca.gov, lacity.gov) and company press releases. Never cite tabloids, content
-farms, aggregators of unknown provenance, or social media posts. A fact you
-cannot verify against such a source is left out. Use only URLs that appeared
-in results or that you fetched; never construct one.
+page needs reading. Some outlets block direct fetches from the cloud; search
+result snippets are acceptable evidence when they come from an approved outlet.
+
+**Source policy.** Credibility comes from editorial standards, a corrections
+record and original reporting, not from who funds an outlet.
+
+Approved, in order of preference:
+1. Wires and primary documents: Reuters, Associated Press, AFP (via France 24),
+   official releases (whitehouse.gov, congress.gov, federalreserve.gov, sec.gov,
+   ftc.gov, supremecourt.gov, ca.gov, lacity.gov, lacounty.gov, weather.gov),
+   court filings, company press releases for facts about that company.
+2. International broadsheets and public broadcasters: Al Jazeera English,
+   Financial Times, The Economist, Bloomberg, Wall Street Journal (news pages),
+   New York Times, Washington Post, BBC, NPR, PBS, The Guardian, France 24, DW,
+   CBC.
+3. Regional specialists: The Hindu, Indian Express, Dawn, The National (UAE),
+   Arab News, Gulf News, Haaretz, Times of Israel, Korea Herald, Nikkei Asia,
+   South China Morning Post.
+4. Los Angeles and California: Los Angeles Times, LAist, CalMatters, KCRW,
+   Los Angeles Business Journal, CBS Los Angeles.
+5. Business and technology trade press for facts within their beat: CNBC,
+   Axios, The Verge, Ars Technica, Modern Retail, Digiday.
+
+State-funded outlets on the list (Al Jazeera, BBC, NPR, France 24, DW, CBC)
+are used freely for reporting outside their funder's interests. An item that
+touches the funder's own government (for Al Jazeera: Qatar and Gulf
+politics) needs a second, independent approved source or is left out.
+
+Never cite, in any role: Fox News, MSNBC, CNN opinion, Newsmax, OAN, Breitbart,
+Daily Wire, HuffPost, Daily Mail, New York Post, The Sun, Daily Express, RT,
+Sputnik, Press TV, Global Times, Xinhua, TASS, content farms, aggregators of
+unknown provenance, press-release wires (PR Newswire, Business Wire) as the
+sole source, or social media posts. Opinion and editorial pages of any outlet
+are never a source of fact. A fact you cannot verify against an approved
+source is left out. Use only URLs that appeared in results or that you
+fetched; never construct one.
 
 Cover, in this fixed order and with these fixed keys:
 
@@ -65,8 +93,8 @@ with practical consequences for a California small-business owner. For "la",
 include city and county policy, the local economy and retail, major events,
 and one line on the weather outlook for the coming days.
 
-The week ahead: 4–5 dated events in the next seven days (data releases,
-votes, summits, earnings, deadlines).
+The week ahead: 4–5 dated events in the next seven days (votes, summits,
+rulings, deadlines, policy announcements).
 
 ## 3. Write
 
