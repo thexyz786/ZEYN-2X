@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Zeyn Brief edition",
+  "description": "One document per day in the dashboard database, collection 'briefs', doc id = date.",
+  "type": "object",
+  "required": ["date", "published_at", "covers_from", "covers_to", "edition", "headline", "topline", "sections", "markets", "watch"],
+  "properties": {
+    "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "published_at": {"type": "string", "format": "date-time"},
+    "covers_from": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "covers_to": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
+    "edition": {"enum": ["daily", "catch-up"]},
+    "headline": {"type": "string"},
+    "missed": {"type": ["string", "null"]},
+    "topline": {"type": "array", "minItems": 3, "maxItems": 6, "items": {"$ref": "#/$defs/link"}},
+    "sections": {"type": "array", "items": {
+      "type": "object", "required": ["key", "title", "items"],
+      "properties": {
+        "key": {"enum": ["geo", "econ", "mena", "tech", "us", "la"]},
+        "title": {"type": "string"},
+        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}}
+      }}},
+    "markets": {"type": "array", "items": {
+      "type": "object", "required": ["name", "value", "as_of"],
+      "properties": {
+        "name": {"type": "string"}, "value": {"type": ["string", "null"]},
+        "change_pct": {"type": ["number", "null"]}, "change_bp": {"type": ["number", "null"]},
+        "as_of": {"type": "string"}, "note": {"type": "string"}
+      }}},
+    "watch": {"type": "array", "items": {"type": "object", "required": ["when", "text"],
+      "properties": {"when": {"type": "string"}, "text": {"type": "string"}}}}
+  },
+  "$defs": {
+    "link": {"type": "object", "required": ["text", "source", "url"],
+      "properties": {"text": {"type": "string"}, "source": {"type": "string"}, "url": {"type": "string", "format": "uri"}}},
+    "item": {"type": "object", "required": ["title", "summary", "why", "source", "url"],
+      "properties": {"title": {"type": "string"}, "summary": {"type": "string"}, "why": {"type": "string"},
+        "source": {"type": "string"}, "url": {"type": "string", "format": "uri"}}}
+  }
+}

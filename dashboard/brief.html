@@ -1,0 +1,364 @@
+<title>Zeyn Brief</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a masthead, a catch-up strip for missed days, a five-line top line,
+   then a two-column ledger (world and America left, markets, LA and the week ahead right). */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#152130; --ink-2:#4b5a6a; --muted:#7a8794;
+  --line:#d8dfe6; --line-2:#e9eef2; --accent:#1f4e79; --accent-ink:#ffffff; --accent-soft:#e4edf6;
+  --up:#0f7a6a; --down:#c23b36; --warn:#a86a00; --warn-soft:#fff4dc; --crit-soft:#fbe7e6;
+  --mid:#eceff2;
+  --f-display:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1319; --surface:#161d26; --ink:#e7edf3; --ink-2:#b4c0cc; --muted:#8694a2;
+    --line:#2a3541; --line-2:#1f2832; --accent:#7fb2e5; --accent-ink:#0e1319; --accent-soft:#1a2a3b;
+    --up:#2aa7a0; --down:#e8625c; --warn:#e0a843; --warn-soft:#2b2410; --crit-soft:#331b1a;
+    --mid:#232c36; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1319; --surface:#161d26; --ink:#e7edf3; --ink-2:#b4c0cc; --muted:#8694a2;
+  --line:#2a3541; --line-2:#1f2832; --accent:#7fb2e5; --accent-ink:#0e1319; --accent-soft:#1a2a3b;
+  --up:#2aa7a0; --down:#e8625c; --warn:#e0a843; --warn-soft:#2b2410; --crit-soft:#331b1a;
+  --mid:#232c36; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;margin:0}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:clamp(16px,3vw,32px);padding-block:20px 48px}
+.eyebrow{font-family:var(--f-display);font-variation-settings:"wdth" 85;font-weight:700;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{text-wrap:balance;margin:0}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+/* Masthead */
+.mast{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;border-bottom:2px solid var(--ink);padding-bottom:14px}
+.mast .name{font-family:var(--f-display);font-variation-settings:"wdth" 80;font-weight:800;font-size:clamp(30px,4.5vw,42px);letter-spacing:-.02em;line-height:1}
+.mast .sub{color:var(--ink-2);font-size:14px;margin-top:6px}
+.meta{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:13px;color:var(--ink-2)}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-family:var(--f-display);font-size:12px;font-weight:600;background:var(--surface)}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.pill.ok .dot{background:var(--up)} .pill.warn .dot{background:var(--warn)} .pill.crit .dot{background:var(--down)}
+
+/* Catch-up strip */
+.catchup{margin-top:18px;border:1px solid var(--line);border-left:4px solid var(--accent);background:var(--surface);border-radius:6px;padding:12px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}
+.catchup .lead{font-family:var(--f-display);font-weight:600;font-size:15px}
+.catchup .days{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:4px;padding:4px 9px;font-family:var(--f-display);font-size:13px;font-weight:600;background:var(--surface);color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip.unread::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;vertical-align:middle}
+.chip[aria-pressed="true"].unread::before{background:var(--accent-ink)}
+.catchup .spacer{flex:1}
+.linkbtn{font-family:var(--f-display);font-size:13px;font-weight:600;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+
+/* Headline + top line */
+.lede{margin-top:26px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.lede h2{font-family:var(--f-display);font-variation-settings:"wdth" 90;font-weight:700;font-size:clamp(22px,3vw,30px);line-height:1.2;letter-spacing:-.01em;max-width:30ch}
+.missed{border:1px solid var(--line);background:var(--accent-soft);border-radius:6px;padding:12px 16px;font-size:15px;color:var(--ink-2)}
+.missed strong{color:var(--ink);font-family:var(--f-display)}
+.topline{margin-top:18px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding-block:6px}
+.topline ol{list-style:none;margin:0;padding:0;counter-reset:n}
+.topline li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;padding-block:9px;border-bottom:1px solid var(--line-2);counter-increment:n}
+.topline li:last-child{border-bottom:0}
+.topline li::before{content:counter(n);font-family:var(--f-mono);font-size:13px;color:var(--muted);padding-top:3px}
+.topline .t{font-size:17px;line-height:1.45}
+.src{font-family:var(--f-display);font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;white-space:nowrap}
+.src:hover{color:var(--accent)}
+.src::before{content:"";display:inline-block;width:1px;height:10px;background:var(--line);margin:0 8px -1px 0}
+
+/* Ledger */
+.ledger{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:32px;margin-top:28px;align-items:start}
+.col{min-width:0;display:grid;gap:28px}
+section.sec{min-width:0}
+.sec header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid var(--ink);padding-bottom:6px;margin-bottom:4px}
+.sec header .count{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.item{padding-block:14px;border-bottom:1px solid var(--line-2)}
+.item:last-child{border-bottom:0}
+.item h3{font-family:var(--f-display);font-weight:700;font-size:17px;line-height:1.3}
+.item h3 a{text-decoration:none}
+.item h3 a:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.item p{margin:6px 0 0;font-size:15.5px;color:var(--ink-2);max-width:68ch}
+.item .why{margin-top:6px;font-size:14.5px;color:var(--ink);display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px}
+.item .why b{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding-top:4px;white-space:nowrap}
+.item .foot{margin-top:6px}
+.item .foot .src::before{display:none}
+
+/* Rail */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
+.card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
+.card header .asof{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.mkt{width:100%;border-collapse:collapse;font-size:14px}
+.mkt tr{border-top:1px solid var(--line-2)}
+.mkt tr:first-child{border-top:0}
+.mkt td{padding:8px 0;vertical-align:middle}
+.mkt .n{font-family:var(--f-display);font-weight:600;font-size:13.5px;color:var(--ink-2)}
+.mkt .v{text-align:right;font-family:var(--f-mono);font-size:13.5px;white-space:nowrap}
+.mkt .d{text-align:right;font-family:var(--f-mono);font-size:13px;white-space:nowrap;width:74px}
+.mkt .d.up{color:var(--up)} .mkt .d.down{color:var(--down)}
+.mkt .bar{width:72px;padding-left:10px}
+.bar .track{position:relative;height:10px;background:var(--mid);border-radius:2px}
+.bar .track::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
+.bar .fill{position:absolute;top:0;bottom:0;border-radius:2px}
+.bar .fill.up{left:50%;background:var(--up)} .bar .fill.down{right:50%;background:var(--down)}
+.mkt .note{font-family:var(--f-body);font-size:13px;color:var(--muted);padding:0 0 8px;grid-column:1/-1}
+.watch{list-style:none;margin:0;padding:0}
+.watch li{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line-2);font-size:14.5px}
+.watch li:first-child{border-top:0}
+.watch .when{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);padding-top:2px}
+.rail .item h3{font-size:15.5px}
+.rail .item p{font-size:14.5px}
+
+/* Archive + footer */
+.archive{margin-top:36px;border-top:1px solid var(--line);padding-top:16px}
+.archive .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.empty{color:var(--muted);font-size:15px;padding-block:8px}
+.foot-note{margin-top:28px;font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:space-between}
+.nodb{margin-top:18px;border:1px solid var(--line);background:var(--warn-soft);border-radius:6px;padding:12px 16px;font-size:14.5px;color:var(--ink)}
+[hidden]{display:none!important}
+@media (max-width:860px){ .ledger{grid-template-columns:minmax(0,1fr)} .rail{order:-1} }
+@media (max-width:520px){ .mkt .bar{display:none} .watch li{grid-template-columns:72px minmax(0,1fr)} }
+@media (prefers-reduced-motion:no-preference){ .chip,.pill,.src{transition:color .15s,background-color .15s,border-color .15s} }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <h1 class="name">Zeyn Brief</h1>
+      <div class="sub" id="mastSub">World affairs, America, markets and Los Angeles. Written every morning at 7:30 Pacific.</div>
+    </div>
+    <div class="meta">
+      <span class="pill" id="freshPill"><span class="dot"></span><span id="freshText">Loading</span></span>
+      <span class="mono" id="pubStamp"></span>
+    </div>
+  </header>
+
+  <div class="nodb" id="nodb" hidden>This page shows the daily brief from its own database. The database could not be reached in this view. Open the page signed in to claude.ai, or try again in a moment.</div>
+
+  <div class="catchup" id="catchup" hidden>
+    <span class="lead" id="catchLead"></span>
+    <div class="days" id="catchDays"></div>
+    <span class="spacer"></span>
+    <button class="linkbtn" id="catchDone">Mark all as read</button>
+  </div>
+
+  <div class="lede">
+    <div class="eyebrow" id="editionLabel">Latest edition</div>
+    <h2 id="headline">The first brief arrives with the next scheduled run.</h2>
+    <div class="missed" id="missed" hidden></div>
+  </div>
+
+  <div class="topline">
+    <div class="eyebrow" style="padding-block:6px">Top line</div>
+    <ol id="topline"><li><span class="t empty">Five developments that matter most will appear here, each with its source.</span></li></ol>
+  </div>
+
+  <div class="ledger">
+    <div class="col" id="mainCol"></div>
+    <aside class="col rail" id="railCol">
+      <div class="card" id="marketsCard">
+        <header><span class="eyebrow">Markets that touch you</span><span class="asof" id="mktAsOf"></span></header>
+        <table class="mkt" id="mktTable"><tbody><tr><td class="empty">S&amp;P 500, Nasdaq, 10-year yield, dollar, gold, Brent and USD/INR, with one-day moves.</td></tr></tbody></table>
+      </div>
+      <div class="card" id="watchCard">
+        <header><span class="eyebrow">The week ahead</span></header>
+        <ul class="watch" id="watchList"><li class="empty">Dated events for the next seven days.</li></ul>
+      </div>
+      <div id="railSections"></div>
+    </aside>
+  </div>
+
+  <div class="archive">
+    <div class="eyebrow">Archive</div>
+    <div class="row" id="archiveRow"><span class="empty">Each day's brief is kept here, so a missed day is never lost.</span></div>
+  </div>
+
+  <div class="foot-note">
+    <span>Sources are linked on every item. Nothing here is written without one.</span>
+    <span id="editionCount"></span>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const RAIL_KEYS = new Set(["la"]);
+  const LS_SEEN = "zeyn-brief:lastSeen";
+  const SS_ANCHOR = "zeyn-brief:sessionAnchor";
+
+  let briefs = [];          // newest first
+  let selected = null;      // date string
+  let anchorSeen = null;    // lastSeen value when this session began
+
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const safeUrl = (u) => (typeof u === "string" && /^https?:\/\//i.test(u)) ? u : null;
+  const lsGet = (k, store) => { try { return (store||localStorage).getItem(k); } catch(e){ return null; } };
+  const lsSet = (k, v, store) => { try { (store||localStorage).setItem(k, v); } catch(e){} };
+
+  const fmtDate = (iso, opts) => {
+    if (!iso) return "";
+    const d = new Date(iso.length === 10 ? iso + "T12:00:00" : iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, opts || {weekday:"short", month:"short", day:"numeric"});
+  };
+  const fmtStamp = (iso) => {
+    const d = new Date(iso); if (isNaN(d)) return "";
+    return d.toLocaleString(undefined, {month:"short", day:"numeric", hour:"numeric", minute:"2-digit", timeZoneName:"short"});
+  };
+
+  function srcLink(item){
+    const u = safeUrl(item.url);
+    const name = esc(item.source || (u ? new URL(u).hostname.replace(/^www\./,"") : "Source"));
+    return u ? `<a class="src" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${name}</a>` : `<span class="src">${name}</span>`;
+  }
+
+  function renderFreshness(latest){
+    const pill = $("freshPill"), txt = $("freshText");
+    pill.classList.remove("ok","warn","crit");
+    if (!latest){ txt.textContent = "No brief yet"; pill.classList.add("warn"); $("pubStamp").textContent = ""; return; }
+    const hrs = (Date.now() - new Date(latest.published_at || latest.date)) / 36e5;
+    if (hrs < 26){ txt.textContent = "Current"; pill.classList.add("ok"); }
+    else if (hrs < 50){ txt.textContent = "One day behind"; pill.classList.add("warn"); }
+    else { txt.textContent = `No brief for ${Math.floor(hrs/24)} days`; pill.classList.add("crit"); }
+    $("pubStamp").textContent = latest.published_at ? "Published " + fmtStamp(latest.published_at) : "";
+  }
+
+  function renderCatchup(){
+    const box = $("catchup");
+    const unseen = anchorSeen ? briefs.filter(b => b.date > anchorSeen) : [];
+    if (!unseen.length){ box.hidden = true; return; }
+    box.hidden = false;
+    const n = unseen.length;
+    $("catchLead").textContent = n === 1
+      ? `One new brief since you last opened this on ${fmtDate(anchorSeen)}.`
+      : `${n} briefs since you last opened this on ${fmtDate(anchorSeen)}. Read them in order:`;
+    $("catchDays").innerHTML = unseen.slice().reverse().map(b =>
+      `<button class="chip unread" data-date="${esc(b.date)}" aria-pressed="${b.date===selected}">${esc(fmtDate(b.date,{month:"short",day:"numeric"}))}</button>`).join("");
+  }
+
+  function renderArchive(){
+    const row = $("archiveRow");
+    if (!briefs.length) return;
+    row.innerHTML = briefs.map(b =>
+      `<button class="chip${anchorSeen && b.date > anchorSeen ? " unread" : ""}" data-date="${esc(b.date)}" aria-pressed="${b.date===selected}">${esc(fmtDate(b.date,{month:"short",day:"numeric"}))}</button>`).join("");
+    $("editionCount").textContent = `${briefs.length} edition${briefs.length===1?"":"s"} on file`;
+  }
+
+  function renderItems(items){
+    return (items||[]).map(it => `
+      <article class="item">
+        <h3>${safeUrl(it.url) ? `<a href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">${esc(it.title)}</a>` : esc(it.title)}</h3>
+        ${it.summary ? `<p>${esc(it.summary)}</p>` : ""}
+        ${it.why ? `<div class="why"><b>Why it matters</b><span>${esc(it.why)}</span></div>` : ""}
+        <div class="foot">${srcLink(it)}</div>
+      </article>`).join("");
+  }
+
+  function renderSections(b){
+    const main = $("mainCol"), rail = $("railSections");
+    const secs = Array.isArray(b.sections) ? b.sections : [];
+    const sec = (s) => `
+      <section class="sec">
+        <header><h2 class="eyebrow" style="color:var(--ink)">${esc(s.title || s.key)}</h2><span class="count">${(s.items||[]).length} item${(s.items||[]).length===1?"":"s"}</span></header>
+        ${renderItems(s.items)}
+      </section>`;
+    main.innerHTML = secs.filter(s => !RAIL_KEYS.has(s.key)).map(sec).join("") || `<div class="empty">Sections will appear here.</div>`;
+    rail.innerHTML = secs.filter(s => RAIL_KEYS.has(s.key)).map(s => `<div class="card">${sec(s)}</div>`).join("");
+  }
+
+  function renderMarkets(b){
+    const rows = Array.isArray(b.markets) ? b.markets : [];
+    const tb = $("mktTable").querySelector("tbody");
+    $("mktAsOf").textContent = rows.find(r => r.as_of)?.as_of || "";
+    if (!rows.length){ tb.innerHTML = `<tr><td class="empty">No market data in this edition.</td></tr>`; return; }
+    const maxAbs = Math.max(0.5, ...rows.map(r => Math.abs(Number(r.change_pct)) || 0));
+    tb.innerHTML = rows.map(r => {
+      const hasPct = typeof r.change_pct === "number" && isFinite(r.change_pct);
+      const hasBp = typeof r.change_bp === "number" && isFinite(r.change_bp);
+      const v = hasPct ? r.change_pct : (hasBp ? r.change_bp : null);
+      const dir = v === null ? "" : (v > 0 ? "up" : v < 0 ? "down" : "");
+      const delta = v === null ? "" : (hasPct ? `${v>0?"+":""}${v.toFixed(2)}%` : `${v>0?"+":""}${Math.round(v)} bp`);
+      const w = hasPct ? Math.min(50, Math.abs(r.change_pct)/maxAbs*50) : 0;
+      return `<tr>
+        <td class="n">${esc(r.name)}</td>
+        <td class="v">${r.value == null ? "<span style='color:var(--muted)'>n/a</span>" : esc(r.value)}</td>
+        <td class="d ${dir}">${esc(delta)}</td>
+        <td class="bar"><div class="track">${hasPct && dir ? `<div class="fill ${dir}" style="width:${w.toFixed(1)}%"></div>` : ""}</div></td>
+      </tr>${r.note ? `<tr><td colspan="4" class="note">${esc(r.note)}</td></tr>` : ""}`;
+    }).join("");
+  }
+
+  function renderWatch(b){
+    const w = Array.isArray(b.watch) ? b.watch : [];
+    $("watchList").innerHTML = w.length
+      ? w.map(x => `<li><span class="when">${esc(x.when||"")}</span><span>${esc(x.text||"")}</span></li>`).join("")
+      : `<li class="empty">Nothing scheduled in this edition.</li>`;
+  }
+
+  function renderBrief(b){
+    const isLatest = briefs.length && briefs[0].date === b.date;
+    const range = (b.covers_from && b.covers_to && b.covers_from !== b.covers_to)
+      ? `Covers ${fmtDate(b.covers_from,{month:"short",day:"numeric"})} to ${fmtDate(b.covers_to)}`
+      : `Covers ${fmtDate(b.covers_to || b.date)}`;
+    $("editionLabel").textContent = `${isLatest ? "Latest edition" : "Edition of " + fmtDate(b.date)} · ${range}${b.edition === "catch-up" ? " · Catch-up edition" : ""}`;
+    $("headline").textContent = b.headline || "No headline recorded for this edition.";
+    const m = $("missed");
+    if (b.missed){ m.hidden = false; m.innerHTML = `<strong>While you were away.</strong> ${esc(b.missed)}`; } else { m.hidden = true; }
+    const top = Array.isArray(b.topline) ? b.topline : [];
+    $("topline").innerHTML = top.length
+      ? top.map(t => `<li><span class="t">${esc(t.text)} ${srcLink(t)}</span></li>`).join("")
+      : `<li><span class="t empty">No top line recorded.</span></li>`;
+    renderSections(b); renderMarkets(b); renderWatch(b);
+  }
+
+  function select(date){
+    selected = date;
+    const b = briefs.find(x => x.date === date);
+    if (b) renderBrief(b);
+    renderCatchup(); renderArchive();
+  }
+
+  function onData(docs){
+    briefs = docs.map(d => d.data()).filter(x => x && x.date).sort((a,b) => a.date < b.date ? 1 : -1);
+    renderFreshness(briefs[0] || null);
+    if (!briefs.length){ renderCatchup(); return; }
+    if (!selected || !briefs.some(b => b.date === selected)) selected = briefs[0].date;
+    // Record this visit, keeping the session's anchor so a reload keeps the catch-up list.
+    const latest = briefs[0].date;
+    if (anchorSeen === null){
+      const sessAnchor = lsGet(SS_ANCHOR, sessionStorage);
+      const stored = lsGet(LS_SEEN);
+      anchorSeen = sessAnchor || stored || "";
+      if (!sessAnchor) lsSet(SS_ANCHOR, anchorSeen, sessionStorage);
+    }
+    if (!lsGet(LS_SEEN) || lsGet(LS_SEEN) < latest) lsSet(LS_SEEN, latest);
+    select(selected);
+  }
+
+  document.addEventListener("click", (e) => {
+    const chip = e.target.closest(".chip[data-date]");
+    if (chip){ select(chip.dataset.date); window.scrollTo({top:0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); return; }
+    if (e.target.id === "catchDone"){
+      anchorSeen = briefs[0]?.date || anchorSeen; lsSet(SS_ANCHOR, anchorSeen, sessionStorage); lsSet(LS_SEEN, anchorSeen);
+      renderCatchup(); renderArchive();
+    }
+  });
+
+  async function start(){
+    renderFreshness(null);
+    const claude = window.claude;
+    const db = claude && claude.use ? await claude.use("db") : null;
+    if (!db){ $("nodb").hidden = false; $("freshText").textContent = "Offline"; return; }
+    db.collection("briefs").orderBy("date","desc").limit(60).onSnapshot(
+      snap => onData(snap.docs),
+      err => { $("nodb").hidden = false; $("nodb").textContent = "The brief database returned an error (" + (err && err.code || "unknown") + "). Reload to try again."; }
+    );
+  }
+  start();
+})();
+</script>
