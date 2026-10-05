@@ -73,12 +73,23 @@ propaganda and hyper-nationalist channels. Eight corroboration rules govern
 casualties, sanctions, scoops, owners and funders. Details and evidence are in
 `source-policy.md`.
 
-## Known constraint
+## Network access
 
-This cloud environment's network policy blocks direct page fetches to news
-domains, so the routine works from search-result evidence and requires two
-approved outlets or a wire for any claim that matters. Allowing news domains in
-the environment's network settings would let it read full articles.
+The routine's cloud environment allowlists the approved outlets by exact host,
+so each needs its `www.` form where the site uses one. As tested on
+5 October 2026:
+
+- **Full text readable:** Al Jazeera, BBC, The Guardian, DW, NPR, PBS, The
+  Hindu, Indian Express, The National, Haaretz, Al-Monitor, Los Angeles Times,
+  Lawfare, SCOTUSblog, Foreign Affairs, Chatham House, Crisis Group, South
+  China Morning Post, LAist, CalMatters.
+- **Refused by the outlet's own server** (bot walls and paywalls): Reuters,
+  AP, Financial Times, The Economist, France 24, New York Times, Wall Street
+  Journal, Politico, Axios, Dawn, Times of Israel. The routine cites these
+  from search results.
+- **Still blocked by the allowlist:** www.washingtonpost.com and
+  www.carnegieendowment.org. Check those two entries in the environment's
+  network settings.
 
 ## Editing
 
