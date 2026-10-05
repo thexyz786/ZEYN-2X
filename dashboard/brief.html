@@ -2,7 +2,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: a masthead, a catch-up strip for missed days, a five-line top line,
-   then a two-column ledger (world and America left, markets, LA and the week ahead right). */
+   then a two-column ledger (world and America left, the week ahead and LA right). */
 :root{
   --bg:#f3f5f7; --surface:#ffffff; --ink:#152130; --ink-2:#4b5a6a; --muted:#7a8794;
   --line:#d8dfe6; --line-2:#e9eef2; --accent:#1f4e79; --accent-ink:#ffffff; --accent-soft:#e4edf6;
@@ -91,21 +91,6 @@ section.sec{min-width:0}
 /* Rail */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
 .card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
-.card header .asof{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
-.mkt{width:100%;border-collapse:collapse;font-size:14px}
-.mkt tr{border-top:1px solid var(--line-2)}
-.mkt tr:first-child{border-top:0}
-.mkt td{padding:8px 0;vertical-align:middle}
-.mkt .n{font-family:var(--f-display);font-weight:600;font-size:13.5px;color:var(--ink-2)}
-.mkt .v{text-align:right;font-family:var(--f-mono);font-size:13.5px;white-space:nowrap}
-.mkt .d{text-align:right;font-family:var(--f-mono);font-size:13px;white-space:nowrap;width:74px}
-.mkt .d.up{color:var(--up)} .mkt .d.down{color:var(--down)}
-.mkt .bar{width:72px;padding-left:10px}
-.bar .track{position:relative;height:10px;background:var(--mid);border-radius:2px}
-.bar .track::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--line)}
-.bar .fill{position:absolute;top:0;bottom:0;border-radius:2px}
-.bar .fill.up{left:50%;background:var(--up)} .bar .fill.down{right:50%;background:var(--down)}
-.mkt .note{font-family:var(--f-body);font-size:13px;color:var(--muted);padding:0 0 8px;grid-column:1/-1}
 .watch{list-style:none;margin:0;padding:0}
 .watch li{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--line-2);font-size:14.5px}
 .watch li:first-child{border-top:0}
@@ -121,7 +106,7 @@ section.sec{min-width:0}
 .nodb{margin-top:18px;border:1px solid var(--line);background:var(--warn-soft);border-radius:6px;padding:12px 16px;font-size:14.5px;color:var(--ink)}
 [hidden]{display:none!important}
 @media (max-width:860px){ .ledger{grid-template-columns:minmax(0,1fr)} .rail{order:-1} }
-@media (max-width:520px){ .mkt .bar{display:none} .watch li{grid-template-columns:72px minmax(0,1fr)} }
+@media (max-width:520px){ .watch li{grid-template-columns:72px minmax(0,1fr)} }
 @media (prefers-reduced-motion:no-preference){ .chip,.pill,.src{transition:color .15s,background-color .15s,border-color .15s} }
 </style>
 
@@ -129,7 +114,7 @@ section.sec{min-width:0}
   <header class="mast">
     <div>
       <h1 class="name">Zeyn Brief</h1>
-      <div class="sub" id="mastSub">World affairs, America, markets and Los Angeles. Written every morning at 7:30 Pacific.</div>
+      <div class="sub" id="mastSub">World affairs, America and Los Angeles. Written every morning at 7:30 Pacific.</div>
     </div>
     <div class="meta">
       <span class="pill" id="freshPill"><span class="dot"></span><span id="freshText">Loading</span></span>
@@ -160,10 +145,6 @@ section.sec{min-width:0}
   <div class="ledger">
     <div class="col" id="mainCol"></div>
     <aside class="col rail" id="railCol">
-      <div class="card" id="marketsCard">
-        <header><span class="eyebrow">Markets that touch you</span><span class="asof" id="mktAsOf"></span></header>
-        <table class="mkt" id="mktTable"><tbody><tr><td class="empty">S&amp;P 500, Nasdaq, 10-year yield, dollar, gold, Brent and USD/INR, with one-day moves.</td></tr></tbody></table>
-      </div>
       <div class="card" id="watchCard">
         <header><span class="eyebrow">The week ahead</span></header>
         <ul class="watch" id="watchList"><li class="empty">Dated events for the next seven days.</li></ul>
@@ -271,27 +252,6 @@ section.sec{min-width:0}
     rail.innerHTML = secs.filter(s => RAIL_KEYS.has(s.key)).map(s => `<div class="card">${sec(s)}</div>`).join("");
   }
 
-  function renderMarkets(b){
-    const rows = Array.isArray(b.markets) ? b.markets : [];
-    const tb = $("mktTable").querySelector("tbody");
-    $("mktAsOf").textContent = rows.find(r => r.as_of)?.as_of || "";
-    if (!rows.length){ tb.innerHTML = `<tr><td class="empty">No market data in this edition.</td></tr>`; return; }
-    const maxAbs = Math.max(0.5, ...rows.map(r => Math.abs(Number(r.change_pct)) || 0));
-    tb.innerHTML = rows.map(r => {
-      const hasPct = typeof r.change_pct === "number" && isFinite(r.change_pct);
-      const hasBp = typeof r.change_bp === "number" && isFinite(r.change_bp);
-      const v = hasPct ? r.change_pct : (hasBp ? r.change_bp : null);
-      const dir = v === null ? "" : (v > 0 ? "up" : v < 0 ? "down" : "");
-      const delta = v === null ? "" : (hasPct ? `${v>0?"+":""}${v.toFixed(2)}%` : `${v>0?"+":""}${Math.round(v)} bp`);
-      const w = hasPct ? Math.min(50, Math.abs(r.change_pct)/maxAbs*50) : 0;
-      return `<tr>
-        <td class="n">${esc(r.name)}</td>
-        <td class="v">${r.value == null ? "<span style='color:var(--muted)'>n/a</span>" : esc(r.value)}</td>
-        <td class="d ${dir}">${esc(delta)}</td>
-        <td class="bar"><div class="track">${hasPct && dir ? `<div class="fill ${dir}" style="width:${w.toFixed(1)}%"></div>` : ""}</div></td>
-      </tr>${r.note ? `<tr><td colspan="4" class="note">${esc(r.note)}</td></tr>` : ""}`;
-    }).join("");
-  }
 
   function renderWatch(b){
     const w = Array.isArray(b.watch) ? b.watch : [];
@@ -313,7 +273,7 @@ section.sec{min-width:0}
     $("topline").innerHTML = top.length
       ? top.map(t => `<li><span class="t">${esc(t.text)} ${srcLink(t)}</span></li>`).join("")
       : `<li><span class="t empty">No top line recorded.</span></li>`;
-    renderSections(b); renderMarkets(b); renderWatch(b);
+    renderSections(b); renderWatch(b);
   }
 
   function select(date){

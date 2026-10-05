@@ -1,7 +1,7 @@
 # dashboard/ — Zeyn Brief
 
 A private daily intelligence dashboard: world affairs, American policy and
-law, markets, and Los Angeles. It updates in the cloud on its own schedule and
+law, and Los Angeles. It carries no stock market or financial market data. It updates in the cloud on its own schedule and
 keeps every edition, so a day away costs nothing.
 
 **Live page:** https://claude.ai/artifact/4PN5ySSbsgngispvgVquWN (private to the owner)
