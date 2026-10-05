@@ -1,33 +1,201 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Zeyn Brief edition",
-  "description": "One document per day in the dashboard database, collection 'briefs', doc id = date.",
+  "description": "One document per day in the dashboard database, collection 'briefs', doc id = date. Sections: geo, econ, mena, us, tech, opp (openings, rendered as analysis), read (deeper reading, rendered in the rail).",
   "type": "object",
-  "required": ["date", "published_at", "covers_from", "covers_to", "edition", "headline", "topline", "sections", "watch"],
+  "required": [
+    "date",
+    "published_at",
+    "covers_from",
+    "covers_to",
+    "edition",
+    "headline",
+    "topline",
+    "sections",
+    "watch"
+  ],
   "properties": {
-    "date": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
-    "published_at": {"type": "string", "format": "date-time"},
-    "covers_from": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
-    "covers_to": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$"},
-    "edition": {"enum": ["daily", "catch-up"]},
-    "headline": {"type": "string"},
-    "missed": {"type": ["string", "null"]},
-    "topline": {"type": "array", "minItems": 3, "maxItems": 6, "items": {"$ref": "#/$defs/link"}},
-    "sections": {"type": "array", "items": {
-      "type": "object", "required": ["key", "title", "items"],
-      "properties": {
-        "key": {"enum": ["geo", "econ", "mena", "tech", "us", "la"]},
-        "title": {"type": "string"},
-        "items": {"type": "array", "items": {"$ref": "#/$defs/item"}}
-      }}},
-    "watch": {"type": "array", "items": {"type": "object", "required": ["when", "text"],
-      "properties": {"when": {"type": "string"}, "text": {"type": "string"}}}}
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "published_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "covers_from": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "covers_to": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "edition": {
+      "enum": [
+        "daily",
+        "catch-up"
+      ]
+    },
+    "headline": {
+      "type": "string"
+    },
+    "missed": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "topline": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/$defs/link"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "title",
+          "items"
+        ],
+        "properties": {
+          "key": {
+            "enum": [
+              "geo",
+              "econ",
+              "mena",
+              "us",
+              "tech",
+              "opp",
+              "read"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/item"
+                },
+                {
+                  "$ref": "#/$defs/opening"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "watch": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "when",
+          "text"
+        ],
+        "properties": {
+          "when": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    }
   },
   "$defs": {
-    "link": {"type": "object", "required": ["text", "source", "url"],
-      "properties": {"text": {"type": "string"}, "source": {"type": "string"}, "url": {"type": "string", "format": "uri"}}},
-    "item": {"type": "object", "required": ["title", "summary", "why", "source", "url"],
-      "properties": {"title": {"type": "string"}, "summary": {"type": "string"}, "why": {"type": "string"},
-        "source": {"type": "string"}, "url": {"type": "string", "format": "uri"}}}
+    "link": {
+      "type": "object",
+      "required": [
+        "text",
+        "source",
+        "url"
+      ],
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "item": {
+      "type": "object",
+      "required": [
+        "title",
+        "summary",
+        "why",
+        "source",
+        "url"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "opening": {
+      "type": "object",
+      "required": [
+        "title",
+        "summary",
+        "angle",
+        "doctrine",
+        "source",
+        "url"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string",
+          "description": "The observed vacuum or shift, with the evidence."
+        },
+        "angle": {
+          "type": "string",
+          "description": "A concrete way to act on it."
+        },
+        "doctrine": {
+          "type": "string",
+          "description": "Which conduct rule (R1 to R7) or negative-list item it touches and how it passes or fails."
+        },
+        "source": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    }
   }
 }

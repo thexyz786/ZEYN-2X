@@ -88,6 +88,15 @@ section.sec{min-width:0}
 .item .foot{margin-top:6px}
 .item .foot .src::before{display:none}
 
+/* Openings */
+.opp{border:1px solid var(--line);border-left:4px solid var(--warn);background:var(--surface);border-radius:6px;padding:4px 18px 6px}
+.opp header{border-bottom:1px solid var(--line-2)}
+.opp .item .grid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;margin-top:8px;font-size:14.5px}
+.opp .item .grid b{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:4px;white-space:nowrap}
+.opp .item .grid .angle{color:var(--ink)}
+.opp .item .grid .doct{color:var(--ink-2)}
+.opp .label{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--warn)}
+
 /* Rail */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
 .card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
@@ -114,7 +123,7 @@ section.sec{min-width:0}
   <header class="mast">
     <div>
       <h1 class="name">Zeyn Brief</h1>
-      <div class="sub" id="mastSub">World affairs, America and Los Angeles. Written every morning at 7:30 Pacific.</div>
+      <div class="sub" id="mastSub">Politics and world affairs, from sources that earn it. Written every morning at 7:30 Pacific.</div>
     </div>
     <div class="meta">
       <span class="pill" id="freshPill"><span class="dot"></span><span id="freshText">Loading</span></span>
@@ -139,7 +148,7 @@ section.sec{min-width:0}
 
   <div class="topline">
     <div class="eyebrow" style="padding-block:6px">Top line</div>
-    <ol id="topline"><li><span class="t empty">Five developments that matter most will appear here, each with its source.</span></li></ol>
+    <ol id="topline"><li><span class="t empty">Five developments that matter most will appear here, each with its source. Below them, the openings and gaps the day exposed.</span></li></ol>
   </div>
 
   <div class="ledger">
@@ -147,7 +156,7 @@ section.sec{min-width:0}
     <aside class="col rail" id="railCol">
       <div class="card" id="watchCard">
         <header><span class="eyebrow">The week ahead</span></header>
-        <ul class="watch" id="watchList"><li class="empty">Dated events for the next seven days.</li></ul>
+        <ul class="watch" id="watchList"><li class="empty">Dated political events for the next seven days: votes, summits, rulings, deadlines.</li></ul>
       </div>
       <div id="railSections"></div>
     </aside>
@@ -168,7 +177,7 @@ section.sec{min-width:0}
 (function(){
   "use strict";
   const $ = (id) => document.getElementById(id);
-  const RAIL_KEYS = new Set(["la"]);
+  const RAIL_KEYS = new Set(["read"]);
   const LS_SEEN = "zeyn-brief:lastSeen";
   const SS_ANCHOR = "zeyn-brief:sessionAnchor";
 
@@ -248,7 +257,21 @@ section.sec{min-width:0}
         <header><h2 class="eyebrow" style="color:var(--ink)">${esc(s.title || s.key)}</h2><span class="count">${(s.items||[]).length} item${(s.items||[]).length===1?"":"s"}</span></header>
         ${renderItems(s.items)}
       </section>`;
-    main.innerHTML = secs.filter(s => !RAIL_KEYS.has(s.key)).map(sec).join("") || `<div class="empty">Sections will appear here.</div>`;
+    const opp = (s) => `
+      <section class="sec opp">
+        <header><h2 class="eyebrow" style="color:var(--ink)">${esc(s.title || "Openings and gaps")}</h2><span class="label">Analysis, not reporting</span></header>
+        ${(s.items||[]).map(it => `
+          <article class="item">
+            <h3>${esc(it.title)}</h3>
+            ${it.summary ? `<p>${esc(it.summary)}</p>` : ""}
+            <div class="grid">
+              ${it.angle ? `<b>The opening</b><span class="angle">${esc(it.angle)}</span>` : ""}
+              ${it.doctrine ? `<b>Doctrine</b><span class="doct">${esc(it.doctrine)}</span>` : ""}
+            </div>
+            <div class="foot">${srcLink(it)}</div>
+          </article>`).join("") || `<div class="empty">No openings identified in this edition.</div>`}
+      </section>`;
+    main.innerHTML = secs.filter(s => !RAIL_KEYS.has(s.key)).map(s => s.key === "opp" ? opp(s) : sec(s)).join("") || `<div class="empty">Sections will appear here.</div>`;
     rail.innerHTML = secs.filter(s => RAIL_KEYS.has(s.key)).map(s => `<div class="card">${sec(s)}</div>`).join("");
   }
 
