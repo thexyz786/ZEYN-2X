@@ -8,6 +8,7 @@
   --line:#d8dfe6; --line-2:#e9eef2; --accent:#1f4e79; --accent-ink:#ffffff; --accent-soft:#e4edf6;
   --up:#0f7a6a; --down:#c23b36; --warn:#a86a00; --warn-soft:#fff4dc; --crit-soft:#fbe7e6;
   --mid:#eceff2;
+  --c-geo:#2a78d6; --c-econ:#1baf7a; --c-mena:#eb6834; --c-us:#4a3aa7; --c-tech:#e87ba4; --c-opp:#eda100; --c-read:#008300;
   --f-display:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
   --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -18,6 +19,7 @@
     --line:#2a3541; --line-2:#1f2832; --accent:#7fb2e5; --accent-ink:#0e1319; --accent-soft:#1a2a3b;
     --up:#2aa7a0; --down:#e8625c; --warn:#e0a843; --warn-soft:#2b2410; --crit-soft:#331b1a;
     --mid:#232c36; color-scheme:dark;
+    --c-geo:#3987e5; --c-econ:#199e70; --c-mena:#d95926; --c-us:#9085e9; --c-tech:#d55181; --c-opp:#c98500; --c-read:#2f9e44;
   }
 }
 :root[data-theme="dark"]{
@@ -25,6 +27,7 @@
   --line:#2a3541; --line-2:#1f2832; --accent:#7fb2e5; --accent-ink:#0e1319; --accent-soft:#1a2a3b;
   --up:#2aa7a0; --down:#e8625c; --warn:#e0a843; --warn-soft:#2b2410; --crit-soft:#331b1a;
   --mid:#232c36; color-scheme:dark;
+  --c-geo:#3987e5; --c-econ:#199e70; --c-mena:#d95926; --c-us:#9085e9; --c-tech:#d55181; --c-opp:#c98500; --c-read:#2f9e44;
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5;margin:0}
@@ -97,6 +100,21 @@ section.sec{min-width:0}
 .opp .item .grid .doct{color:var(--ink-2)}
 .opp .label{font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--warn)}
 
+/* Section color coding: hue lives on marks (dots, rules, edges), text stays in ink */
+.secnav{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:22px}
+.secnav a{display:inline-flex;align-items:center;gap:7px;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface);font-family:var(--f-display);font-size:12.5px;font-weight:600;color:var(--ink-2);text-decoration:none}
+.secnav a:hover{border-color:var(--sec);color:var(--ink)}
+.secnav .n{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.swatch{width:9px;height:9px;border-radius:2px;background:var(--sec);flex:none}
+section.sec{--sec:var(--ink);scroll-margin-top:16px}
+.sec > header{border-bottom:2px solid var(--sec) !important}
+.sec > header h2{display:flex;align-items:center;gap:8px}
+.sec > header h2::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--sec);flex:none}
+.sec .item{border-left:3px solid color-mix(in srgb, var(--sec) 45%, transparent);padding-left:14px}
+.sec .item .why b{color:var(--ink-2)}
+.opp{border-left-color:var(--c-opp) !important}
+.topline li .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:8px;vertical-align:1px}
+
 /* Rail */
 .card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;min-width:0}
 .card header{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:10px}
@@ -150,6 +168,8 @@ section.sec{min-width:0}
     <div class="eyebrow" style="padding-block:6px">Top line</div>
     <ol id="topline"><li><span class="t empty">Five developments that matter most will appear here, each with its source. Below them, the openings and gaps the day exposed.</span></li></ol>
   </div>
+
+  <nav class="secnav" id="secNav" aria-label="Sections"></nav>
 
   <div class="ledger">
     <div class="col" id="mainCol"></div>
@@ -253,12 +273,12 @@ section.sec{min-width:0}
     const main = $("mainCol"), rail = $("railSections");
     const secs = Array.isArray(b.sections) ? b.sections : [];
     const sec = (s) => `
-      <section class="sec">
+      <section class="sec" id="sec-${esc(s.key)}" style="--sec:var(--c-${esc(s.key)}, var(--ink))">
         <header><h2 class="eyebrow" style="color:var(--ink)">${esc(s.title || s.key)}</h2><span class="count">${(s.items||[]).length} item${(s.items||[]).length===1?"":"s"}</span></header>
         ${renderItems(s.items)}
       </section>`;
     const opp = (s) => `
-      <section class="sec opp">
+      <section class="sec opp" id="sec-opp" style="--sec:var(--c-opp)">
         <header><h2 class="eyebrow" style="color:var(--ink)">${esc(s.title || "Openings and gaps")}</h2><span class="label">Analysis, not reporting</span></header>
         ${(s.items||[]).map(it => `
           <article class="item">
@@ -273,6 +293,7 @@ section.sec{min-width:0}
       </section>`;
     main.innerHTML = secs.filter(s => !RAIL_KEYS.has(s.key)).map(s => s.key === "opp" ? opp(s) : sec(s)).join("") || `<div class="empty">Sections will appear here.</div>`;
     rail.innerHTML = secs.filter(s => RAIL_KEYS.has(s.key)).map(s => `<div class="card">${sec(s)}</div>`).join("");
+    $("secNav").innerHTML = secs.map(s => `<a href="#sec-${esc(s.key)}" style="--sec:var(--c-${esc(s.key)}, var(--ink))"><span class="swatch"></span>${esc(s.title || s.key)}<span class="n">${(s.items||[]).length}</span></a>`).join("");
   }
 
 
@@ -294,7 +315,11 @@ section.sec{min-width:0}
     if (b.missed){ m.hidden = false; m.innerHTML = `<strong>While you were away.</strong> ${esc(b.missed)}`; } else { m.hidden = true; }
     const top = Array.isArray(b.topline) ? b.topline : [];
     $("topline").innerHTML = top.length
-      ? top.map(t => `<li><span class="t">${esc(t.text)} ${srcLink(t)}</span></li>`).join("")
+      ? top.map(t => {
+          const hit = (b.sections||[]).find(sec => (sec.items||[]).some(it => it.url && it.url === t.url));
+          const dot = hit ? `<span class="dot" style="background:var(--c-${esc(hit.key)})" title="${esc(hit.title||"")}"></span>` : "";
+          return `<li><span class="t">${dot}${esc(t.text)} ${srcLink(t)}</span></li>`;
+        }).join("")
       : `<li><span class="t empty">No top line recorded.</span></li>`;
     renderSections(b); renderWatch(b);
   }
