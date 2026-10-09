@@ -1,0 +1,17 @@
+{
+  "name": "zeyn-ledger",
+  "version": "1.0.0",
+  "description": "Plain-language shared-expense ledger and financial planner that learns from use",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "bin": { "ledger": "bin/ledger.js" },
+  "scripts": {
+    "start": "node bin/ledger.js serve",
+    "cli": "node bin/ledger.js",
+    "test": "node --test test/*.test.js"
+  },
+  "optionalDependencies": {
+    "@anthropic-ai/sdk": "^0.132.1"
+  }
+}

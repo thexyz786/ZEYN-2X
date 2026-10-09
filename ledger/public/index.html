@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6a65; --line: #e6e3dc;
+    --accent: #1f6f5c; --accent-ink: #ffffff; --pos: #1f7a4d; --neg: #b3362c; --warn: #a86b00;
+    --bar: #d9e9e3; --me: #1f6f5c; --bot: #f1efe9; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141513; --panel: #1c1d1b; --ink: #ecebe6; --muted: #9b9a93; --line: #2e2f2c;
+      --accent: #4fb596; --accent-ink: #0d1411; --pos: #5cc48f; --neg: #ef7b70; --warn: #e2b04a;
+      --bar: #23392f; --me: #2c6e5c; --bot: #242522; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap; padding: 18px 24px 8px; }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+  .kpis { display: flex; gap: 20px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .kpis b { display: block; color: var(--ink); font-size: 17px; font-variant-numeric: tabular-nums; }
+  main { display: grid; grid-template-columns: minmax(340px, 1fr) minmax(0, 1.25fr); gap: 16px; padding: 8px 24px 24px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 8px 16px 16px; } header { padding: 16px 16px 4px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 14px 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  #chat { display: flex; flex-direction: column; height: calc(100vh - 110px); min-height: 480px; position: sticky; top: 12px; padding: 0; }
+  @media (max-width: 900px) { #chat { position: static; height: 70vh; } }
+  #log { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 92%; padding: 9px 12px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .msg.me { align-self: flex-end; background: var(--me); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bot); border-bottom-left-radius: 4px; }
+  .msg code { font: 12px ui-monospace, Menlo, monospace; opacity: .6; }
+  .msg em { color: var(--muted); font-style: normal; font-size: 13px; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 10px; }
+  .chip { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  textarea { flex: 1; resize: none; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font: inherit; background: var(--bg); color: var(--ink); min-height: 42px; max-height: 140px; }
+  textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button.send { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 0 16px; font-weight: 600; cursor: pointer; }
+  .side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .side .wide { grid-column: 1 / -1; }
+  main > *, .side > * { min-width: 0; }
+  @media (max-width: 640px) { .side { grid-template-columns: 1fr; } }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  .row:last-child { border-bottom: 0; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); } .muted { color: var(--muted); } .warn { color: var(--warn); }
+  .bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
+  .bar > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .bar.over > i { background: var(--neg); }
+  .bar.pace > i { background: var(--warn); }
+  .small { font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  svg text { fill: var(--muted); font-size: 11px; }
+  .empty { color: var(--muted); font-size: 13px; }
+  .insight { padding: 4px 0; font-size: 14px; }
+  pre.activity { margin: 0; font: 12px/1.6 ui-monospace, Menlo, monospace; white-space: pre-wrap; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ledger</h1>
+  <div class="kpis" id="kpis"></div>
+</header>
+<main>
+  <section class="card" id="chat" aria-label="Chat">
+    <div id="log" role="log" aria-live="polite"></div>
+    <div class="chips" id="chips"></div>
+    <form id="form">
+      <textarea id="input" rows="1" placeholder="e.g. I paid 120 for dinner with Ali and Sara" autocomplete="off"></textarea>
+      <button class="send" type="submit">Send</button>
+    </form>
+  </section>
+  <section class="side">
+    <div class="card"><h2>Balances</h2><div id="balances"></div></div>
+    <div class="card"><h2 id="monthTitle">This month</h2><div id="month"></div></div>
+    <div class="card wide"><h2>Forecast</h2><div id="forecast"></div></div>
+    <div class="card"><h2>Goals</h2><div id="goals"></div></div>
+    <div class="card"><h2>Budgets</h2><div id="budgets"></div></div>
+    <div class="card wide"><h2>Insights</h2><div id="insights"></div></div>
+    <div class="card"><h2>Groups</h2><div id="groups"></div></div>
+    <div class="card"><h2>Recurring</h2><div id="recurring"></div></div>
+    <div class="card wide"><h2>Recent activity</h2><pre class="activity" id="activity"></pre></div>
+    <div class="card wide"><h2>Learning</h2><div id="brain" class="small"></div></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let currency = 'USD';
+const money = (c) => new Intl.NumberFormat('en-US', { style: 'currency', currency }).format((c || 0) / 100);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const md = (s) => esc(s)
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(/(^|\s)_(.+?)_(?=\s|$)/gm, '$1<em>$2</em>')
+  .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+const CHIPS = ['balances', 'how am I doing', 'forecast 12 months', 'simplify', 'budgets', 'what have you learned', 'undo', 'help'];
+$('chips').innerHTML = CHIPS.map((c) => `<button class="chip" type="button">${esc(c)}</button>`).join('');
+$('chips').addEventListener('click', (e) => { if (e.target.matches('.chip')) send(e.target.textContent); });
+
+function bubble(text, who) {
+  const d = document.createElement('div');
+  d.className = `msg ${who}`;
+  d.innerHTML = who === 'bot' ? md(text) : esc(text);
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+  return d;
+}
+
+async function send(text) {
+  text = text.trim();
+  if (!text) return;
+  bubble(text, 'me');
+  const pending = bubble('…', 'bot');
+  try {
+    const r = await fetch('/api/command', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    pending.innerHTML = md(data.reply);
+    render(data.dashboard);
+  } catch (err) {
+    pending.innerHTML = md(`⚠️ ${err.message}`);
+  }
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+$('form').addEventListener('submit', (e) => { e.preventDefault(); const t = $('input').value; $('input').value = ''; send(t); });
+$('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } });
+
+function render(d) {
+  currency = d.currency;
+  const owed = d.balances.filter((b) => b.amount > 0).reduce((a, b) => a + b.amount, 0);
+  const owe = d.balances.filter((b) => b.amount < 0).reduce((a, b) => a - b.amount, 0);
+  $('kpis').innerHTML = [
+    ['Owed to you', money(owed), 'pos'], ['You owe', money(owe), owe ? 'neg' : ''],
+    [`Spent · ${d.month.label}`, money(d.month.spent), ''], ['Earned', money(d.month.income), ''],
+    ...(d.cash != null ? [['Cash (est.)', money(d.cash), d.cash < 0 ? 'neg' : '']] : []),
+  ].map(([k, v, c]) => `<div>${esc(k)}<b class="${c}">${v}</b></div>`).join('');
+
+  const bals = d.balances.filter((b) => b.amount);
+  $('balances').innerHTML = bals.length ? bals.map((b) => `<div class="row"><span>${esc(b.name)}</span><span class="${b.amount > 0 ? 'pos' : 'neg'}">${b.amount > 0 ? 'owes you ' : 'you owe '}${money(Math.abs(b.amount))}</span></div>`).join('') : '<div class="empty">All settled up.</div>';
+
+  $('monthTitle').textContent = d.month.label;
+  const cats = Object.entries(d.month.byCategory).sort((a, b) => b[1] - a[1]);
+  const max = Math.max(1, ...cats.map(([, v]) => v));
+  $('month').innerHTML = cats.length ? cats.map(([c, v]) => `<div class="row small" style="border:0;padding:0"><span>${esc(c)}</span><span>${money(v)}</span></div><div class="bar"><i style="width:${(100 * v) / max}%"></i></div>`).join('') : '<div class="empty">No spending yet this month.</div>';
+
+  $('budgets').innerHTML = d.budgets.length ? d.budgets.map((b) => `<div class="row small" style="border:0;padding:0"><span>${esc(b.category)}</span><span>${money(b.used)} / ${money(b.budget)}</span></div><div class="bar ${b.used > b.budget ? 'over' : !b.onPace ? 'pace' : ''}"><i style="width:${Math.min(100, b.pct)}%"></i></div>`).join('') : '<div class="empty">Try “budget 400 for food”.</div>';
+
+  $('goals').innerHTML = d.goals.length ? d.goals.map((g) => `<div class="row small" style="border:0;padding:0"><span>${esc(g.name)}</span><span>${money(g.saved)} / ${money(g.target)}</span></div><div class="bar"><i style="width:${g.pct}%"></i></div>${g.deadline ? `<div class="muted small" style="margin:-4px 0 8px">by ${g.deadline} · ${money(g.perMonth)}/mo</div>` : ''}`).join('') : '<div class="empty">Try “save 10000 for a car by June 2027”.</div>';
+
+  renderForecast(d.forecast);
+
+  $('insights').innerHTML = d.insights.length ? d.insights.map((x) => `<div class="insight">${{ good: '🟢', warn: '🟡', bad: '🔴', info: '•' }[x.level]} ${esc(x.text)}</div>`).join('') : '<div class="empty">Insights appear as history builds up.</div>';
+
+  $('groups').innerHTML = d.groups.length ? d.groups.map((g) => `<div style="margin-bottom:8px"><b>${esc(g.name)}</b> <span class="muted small">${g.memberNames.map(esc).join(', ')}</span>${g.plan.length ? g.plan.map((p) => `<div class="row small"><span>${esc(p.fromName)} → ${esc(p.toName)}</span><span>${money(p.amount)}</span></div>`).join('') : '<div class="muted small">settled</div>'}</div>`).join('') : '<div class="empty">Try “create group Trip with Ali and Sara”.</div>';
+
+  $('recurring').innerHTML = d.recurring.length ? d.recurring.map((r) => `<div class="row small"><span>${r.kind === 'income' ? '💰' : '🔁'} ${esc(r.label)}</span><span>${money(r.payload.amount)} / ${r.freq} · next ${r.next.slice(5)}</span></div>`).join('') : '<div class="empty">Try “netflix 15 monthly”.</div>';
+
+  $('activity').textContent = d.activity.replace(/`/g, '');
+  const st = d.brain.stats;
+  const understood = st.ruleHits + st.templateHits + st.aiHits;
+  $('brain').innerHTML = `Understood <b>${understood}</b> of ${understood + st.misses} statements · <b>${d.brain.templates}</b> phrasings learned · <b>${d.brain.words}</b> category words · forecast factor ×${d.brain.factor.toFixed(2)} · AI fallback ${d.brain.ai ? 'on' : 'off'}`;
+}
+
+function renderForecast(f) {
+  const rows = f.rows;
+  const hasCash = f.cashNow != null;
+  const series = rows.map((r) => (hasCash ? r.cashEnd : r.cumulative));
+  const W = 640, H = 150, pad = 28;
+  const lo = Math.min(0, ...series), hi = Math.max(1, ...series);
+  const x = (i) => pad + (i * (W - 2 * pad)) / Math.max(1, rows.length - 1);
+  const y = (v) => H - 20 - ((v - lo) * (H - 40)) / (hi - lo || 1);
+  const pts = series.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  const svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${hasCash ? 'Projected cash' : 'Cumulative surplus'} by month">
+    <line x1="${pad}" x2="${W - pad}" y1="${y(0)}" y2="${y(0)}" stroke="var(--line)" />
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" />
+    ${series.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${v < 0 ? 'var(--neg)' : 'var(--accent)'}"><title>${rows[i].label}: ${money(v)}</title></circle><text x="${x(i)}" y="${H - 4}" text-anchor="middle">${rows[i].label.slice(0, 3)}</text>`).join('')}
+  </svg>`;
+  const table = `<div class="scroll"><table><tr><th>Month</th><th>In</th><th>Out</th><th>Net</th><th>Goals</th><th>${hasCash ? 'Cash' : 'Cumulative'}</th></tr>${rows.map((r, i) => `<tr><td>${r.label}</td><td>${money(r.income)}</td><td>${money(r.fixed + r.variable)}</td><td class="${r.net < 0 ? 'neg' : 'pos'}">${money(r.net)}</td><td>${money(r.goals)}</td><td class="${series[i] < 0 ? 'neg' : ''}">${money(series[i])}</td></tr>`).join('')}</table></div>`;
+  $('forecast').innerHTML = `<div class="muted small">Variable spend ${money(f.variablePerMonth)}/mo from ${esc(f.basis)}${Math.abs(f.factor - 1) > 0.01 ? ` · self-corrected ×${f.factor.toFixed(2)}` : ''}${hasCash ? '' : ' · set your balance to project real cash'}</div>${svg}${table}`;
+}
+
+fetch('/api/dashboard').then((r) => r.json()).then((d) => {
+  render(d);
+  bubble('Tell me what happened — “I paid 120 for dinner with Ali and Sara”, “Ali paid me back 20”, “can I afford a 1500 laptop in March?”. Type **help** for everything I understand.', 'bot');
+});
+</script>
+</body>
+</html>
