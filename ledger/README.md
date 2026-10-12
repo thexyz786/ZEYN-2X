@@ -27,6 +27,12 @@ node bin/ledger.js "I paid 60 for dinner with Ali"   # one-shot
 npm test
 ```
 
+**Web page version.** `node scripts/build-web.mjs` bundles the same engine
+(unchanged) into one self-contained page at `dist/ledger.html`, built from
+`web/app.html`. Published as a claude.ai Artifact, that page saves each
+person's ledger privately to their account, and uses Claude through the page
+itself for the AI fallback, so no API key is needed.
+
 Data is stored in `ledger/data/ledger.json`, with an undo history beside it.
 Set `LEDGER_DATA=/path/file.json` to keep it somewhere else, such as a synced
 folder. `data/` is git-ignored, so your finances never end up in the repo.

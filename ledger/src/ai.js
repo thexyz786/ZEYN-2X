@@ -10,6 +10,7 @@
 // an `ant auth login` profile). Set LEDGER_AI=off to force offline mode.
 
 const MODEL = process.env.LEDGER_MODEL || 'claude-opus-5-5';
+export const AI_OFF_HINT = 'set ANTHROPIC_API_KEY to enable';
 
 export const GRAMMAR = `Canonical commands (one per line; amounts are plain numbers; quote multi-word descriptions):
   I paid 120 for "dinner" with Ali and Sara          (payer + listed people split equally)

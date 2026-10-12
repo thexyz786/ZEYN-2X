@@ -2,7 +2,7 @@ import { Ledger, ME, norm } from './ledger.js';
 import { Brain } from './brain.js';
 import { Planner } from './planner.js';
 import { parse } from './parser.js';
-import { translate as aiTranslate, aiEnabled } from './ai.js';
+import { translate as aiTranslate, aiEnabled, AI_OFF_HINT } from './ai.js';
 import { fmt } from './money.js';
 import { addDays, addMonths, monthEnd, monthStart, monthLabel, monthKey } from './dates.js';
 
@@ -486,7 +486,7 @@ export class Assistant {
       `• Category sense: ${Object.keys(b.categoryWords).length} words${learnedWords.length ? ' — ' + learnedWords.map(([w, [c]]) => `${w}→${c}`).join(', ') : ''}.`,
       aliases.length ? `• Nicknames: ${aliases.join(', ')}.` : null,
       `• Forecast self-correction: ×${b.calibration.factor.toFixed(2)} from ${b.calibration.history.filter((h) => h.actual != null).length} scored month(s).`,
-      `• AI fallback: ${aiEnabled() ? 'on' : 'off (set ANTHROPIC_API_KEY to enable)'}.`,
+      `• AI fallback: ${aiEnabled() ? 'on' : `off (${AI_OFF_HINT})`}.`,
       b.misses.length ? `• Recent misses (teach me with: teach "phrase" = "command"):\n${b.misses.slice(-5).map((m) => `   – “${m.text}”`).join('\n')}` : null,
     ];
     return lines.filter(Boolean).join('\n');
@@ -507,7 +507,7 @@ export class Assistant {
     const tips = [];
     if (/\d/.test(text)) tips.push('“I paid 60 for dinner with Ali”', '“Ali paid me 20”', '“budget 300 for food”');
     else tips.push('“balances”', '“forecast”', '“how am I doing”');
-    const ai = aiEnabled() ? '' : '\n_Set ANTHROPIC_API_KEY and I’ll learn new phrasings automatically._';
+    const ai = aiEnabled() ? '' : `\n_AI fallback is off (${AI_OFF_HINT}); turn it on and I’ll learn new phrasings automatically._`;
     return `🤔 I didn’t catch that. Try ${tips.join(', ')} — or teach me: teach "${text.replace(/"/g, "'")}" = "<command>".${ai}`;
   }
 
