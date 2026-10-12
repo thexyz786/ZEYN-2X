@@ -55,9 +55,15 @@ checking balance. Never compute a balance yourself.
   - `expense`: my own spending.
   - `income`: pay, financial aid, scholarships, refunds from merchants,
     interest.
-  - `internal`: a credit-card payment, autopay, or a transfer between my own
-    accounts. Mark both sides (the checking debit and the card credit). These
-    are skipped on import so nothing is counted twice.
+  - `internal`: only a move between two accounts that **both** have their
+    transactions in this file, such as a card payment when that card's
+    purchases are also listed. Mark both sides. These are skipped on import
+    so nothing is counted twice.
+  - If a card's own purchases are **not** in the files, its payments from
+    checking are `expense` with category `card`, so the spending isn't lost.
+  - Money that leaves for good, such as savings at another bank or
+    transfers abroad (even to my own account), is `expense` with category
+    `savings` or `transfers-abroad`. It's no longer spendable here.
   - `transfer:<FirstName>`: Zelle, Venmo or cash sent to or received from a
     person when it settles a debt or is a loan, not a purchase. Use this only
     when the files or notes make that clear.
@@ -68,12 +74,20 @@ checking balance. Never compute a balance yourself.
 - `note`: optional. Use it for anything I should check, such as "unclear
   payee" or "possible duplicate across files".
 
-**`## Recurring`**: `| name | amount | frequency | day | kind | category |`
+**`## Recurring`**: `| name | amount | frequency | day | kind | category | next |`
 List each bill, subscription or paycheck that appears in at least two
 separate months with a steady amount and is still active in the latest
 month. `frequency` is weekly, biweekly, monthly or yearly. `day` is the
-usual day of the month. `kind` is expense or income. Leave out anything
-that has stopped.
+usual day of the month. `kind` is expense or income. `next` is the next
+date it falls due after the last one in the files (YYYY-MM-DD). Include
+rent and regular savings transfers even if they appear only once. Leave out
+anything that has stopped.
+
+**`## Expected`**: `| name | amount | date |`
+One-off money the files say is coming, such as "disbursement 2 of 2" of a
+grant or a refund that's been promised, with the date it's due. Include it
+only when the amount is stated; if the date isn't stated, use your best
+reading of the files and say so in the closing lines.
 
 **`## Budgets`**: `| category | monthly |`
 Include this only if the project's budget files set monthly limits. Use their

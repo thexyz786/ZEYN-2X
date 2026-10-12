@@ -143,3 +143,29 @@ test('budget questions answer without recording anything', async () => {
   assert.equal(af.free, lo.free, '"what\'s left" and "can I afford" use the same number');
   assert.match((await a.handle('how much do I have left for food')).reply, /left\*\* in your food budget/);
 });
+
+test('expected income counts in plans; days after the last statement are estimated', async () => {
+  const { a } = make('2026-10-12T12:00:00');
+  await a.handle(`# Ledger import
+account: Test Checking
+closing_balance: 3000
+balance_date: 2026-09-18
+
+## Transactions
+| date | description | amount | category | kind |
+|---|---|---|---|---|
+| 2026-09-02 | Coffee | -15.00 | food | expense |
+| 2026-09-06 | Groceries | -60.00 | groceries | expense |
+| 2026-09-10 | Lunch | -30.00 | food | expense |
+| 2026-09-15 | Books | -45.00 | education | expense |`);
+  // 150 over 18 days → ~250/month everyday; 24 uncovered days since Sep 18 are estimated.
+  const ct = a.planner.cashToday();
+  assert.ok(ct.gap > 15000 && ct.gap < 25000, `gap ${ct.gap}`);
+  assert.equal(ct.cash, 300000 - ct.gap);
+  const before = a.planner.leftover(3).free;
+  const r = await a.handle('expect 1849 Pell Grant on Jan 12');
+  assert.match(r.reply, /Expecting \$1,849\.00 from Pell Grant on 2027-01-12/);
+  assert.equal(a.planner.leftover(3).free - before, 184900);
+  assert.equal(a.ledger.state.income.length, 0, 'not recorded until it arrives');
+  assert.equal((await a.handle("I'll get 500 from freelance in November")).results[0].intents[0].type, 'expect');
+});

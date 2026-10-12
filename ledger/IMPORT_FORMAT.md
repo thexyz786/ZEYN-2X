@@ -84,9 +84,12 @@ All header lines are optional.
 
 ## Optional sections
 
-- **Recurring** (`name, amount, frequency, day, kind, category`): bills and
+- **Recurring** (`name, amount, frequency, day, kind, category, next`): bills and
   pay you already know about. `frequency` is one of weekly, biweekly, monthly
   or yearly. Bills that repeat in your history are detected without being
   listed here.
+- **Expected** (`name, amount, date`): one-off money that's coming, such as
+  the second disbursement of a grant. Plans count it until the deposit
+  arrives in a statement, which then replaces it.
 - **Budgets** (`category, monthly`).
 - **Goals** (`name, target, deadline, saved`).

@@ -342,6 +342,7 @@ export class Ledger {
 }
 
 export function advance(r, date) {
+  if (r.freq === 'once') return '9999-12-31'; // a single expected item
   if (r.freq === 'week') return addDays(date, 7);
   if (r.freq === 'biweek') return addDays(date, 14);
   if (r.freq === 'year') return addMonths(date, 12, r.day);

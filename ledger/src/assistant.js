@@ -8,7 +8,7 @@ import { looksLikeStatement, parseStatement, applyStatement } from './importer.j
 import { addDays, addMonths, monthEnd, monthStart, monthLabel, monthKey } from './dates.js';
 
 const MUTATING = new Set([
-  'expense', 'transfer', 'income', 'recurring', 'settle', 'delete', 'budget', 'goal', 'contribute',
+  'expense', 'transfer', 'income', 'recurring', 'expect', 'settle', 'delete', 'budget', 'goal', 'contribute',
   'cash', 'currency', 'group', 'friends', 'alias', 'teachCategory', 'stopRecurring',
 ]);
 
@@ -149,7 +149,7 @@ export class Assistant {
     if (rep.reconciled) L.push(`• Matched ${rep.reconciled} scheduled bill${rep.reconciled > 1 ? 's' : ''} to the real amounts.`);
     if (rep.recurring.length)
       L.push(`• Scheduled ${rep.recurring.length} repeating item${rep.recurring.length > 1 ? 's' : ''}${rep.recurring.some((r) => r.detected) ? ' (spotted from the pattern)' : ''}: ` +
-        rep.recurring.map((r) => `${r.label} ${this.m(r.amount)}/${r.freq === 'biweek' ? '2 weeks' : r.freq}`).join(', ') + '.');
+        rep.recurring.map((r) => (r.freq === 'once' ? `${r.label} ${this.m(r.amount)} expected ${r.next}` : `${r.label} ${this.m(r.amount)}/${r.freq === 'biweek' ? '2 weeks' : r.freq}`)).join(', ') + '.');
     if (rep.cash) L.push(`• Cash on hand set to ${this.m(rep.cash.amount)} as of ${rep.cash.date}; forecasts start from there.`);
     if (rep.budgets || rep.goals) L.push(`• Added ${rep.budgets} budget${rep.budgets === 1 ? '' : 's'} and ${rep.goals} goal${rep.goals === 1 ? '' : 's'}.`);
     if (rep.people.length) L.push(`• New people: ${rep.people.join(', ')}.`);
@@ -229,6 +229,13 @@ export class Assistant {
       case 'income': {
         const inc = L.addIncome({ amount: i.amount, source: i.source, date: i.date });
         return `✓ Income: ${this.m(inc.amount)} from ${inc.source}${inc.date !== L.today() ? ` on ${inc.date}` : ''}. \`${inc.id}\``;
+      }
+      case 'expect': {
+        const r = L.addRecurring({ kind: 'income', freq: 'once', day: null, start: i.date, payload: { amount: i.amount, source: i.source }, label: i.source });
+        const posted = L.materializeRecurring();
+        return posted.length
+          ? `💰 Recorded ${this.m(i.amount)} from ${i.source} on ${i.date}. \`${r.id}\``
+          : `💰 Expecting ${this.m(i.amount)} from ${i.source} on ${i.date}. Forecasts and “what’s left” now count it; it’s matched to the real deposit when that statement is imported. \`${r.id}\``;
       }
       case 'recurring': {
         const inner = i.inner;
@@ -513,11 +520,13 @@ export class Assistant {
         ? `That’s ${r.current ? 'your cash today' : `your projected cash at the start of ${r.label}`} (${this.m(r.start)})${r.reservedBefore ? `, less ${this.m(r.reservedBefore)} already set aside for goals` : ''}${r.incomeAhead ? `, plus ${this.m(r.incomeAhead)} of expected income` : ''}, minus ${this.m(r.billsAhead)} of bills${r.goals ? ` and ${this.m(r.goals)} of goal saving` : ''} through the end of ${r.label}.`
         : `Income ${this.m(r.income)} − bills ${this.m(r.bills)}${r.goals ? ` − goal savings ${this.m(r.goals)}` : ''}${r.spent ? ` − already spent ${this.m(r.spent)}` : ''}.`,
     );
-    if (r.usual > 0)
+    if (r.usual > 0 && r.free <= 0) L.push(`Your usual everyday spending of about ${this.m(r.usual)} would come on top of that.`);
+    else if (r.usual > 0)
       L.push(r.afterUsual >= 0
         ? `At your usual pace (${this.m(r.usual)} of everyday spending) you’d finish with ${this.m(r.afterUsual)} to spare.`
         : `🟡 Your usual everyday spending (${this.m(r.usual)}) is more than that — trim about ${this.m(-r.afterUsual)} or it comes out of savings.`);
-    if (r.cash != null && r.runwayMonths != null && r.runwayMonths < 24) L.push(`At your usual monthly spend, your cash lasts about ${r.runwayMonths.toFixed(1)} months without new income.`);
+    if (r.cash != null && r.free > 0 && r.runwayMonths != null && r.runwayMonths >= 0.1 && r.runwayMonths < 24) L.push(`At your usual monthly spend, your cash lasts about ${r.runwayMonths.toFixed(1)} months without new income.`);
+    if (r.cashGap > 0) L.push(`_Your last statement ends ${r.dataEnd}, so this counts an estimated ${this.m(r.cashGap)} of everyday spending since then. Import your newest statement to replace the estimate._`);
     if (r.cash == null) L.push('_Tell me your bank balance or import a statement and this becomes an exact cash answer._');
     return L.join('\n');
   }
@@ -590,7 +599,7 @@ export class Assistant {
       budgets: this.planner.budgetStatus(),
       goals: this.planner.goalNeeds(),
       forecast: f,
-      cash: L.estimatedCash(),
+      cash: this.planner.cashToday().cash,
       recurring: this.s.recurring.filter((r) => r.active),
       insights: this.planner.insights(),
       activity: this.historyReply(12),

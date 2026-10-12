@@ -29,42 +29,80 @@ export class Planner {
     const dates = [...this.s.expenses, ...this.s.income].map((x) => x.date).sort();
     return dates[0] ?? null;
   }
-  /** Average monthly non-recurring spend (your share) over recent full months. */
+  /**
+   * The last day the history is known to be complete. After an import that
+   * is the newest statement's end date: days after it have spending the
+   * ledger hasn't seen yet. Without imports, everything typed in is the
+   * record, so it is today.
+   */
+  dataEnd() {
+    const today = this.l.today();
+    const last = this.s.imports.map((x) => x.to).filter(Boolean).sort().at(-1);
+    return last && last < today ? last : today;
+  }
+
+  /**
+   * Usual monthly everyday (non-recurring) spending, your share. Each of the
+   * last few months is scaled up by how many of its days the history covers
+   * (Sep 1–18 of data counts as 18/30 of September). Lumpy one-offs — far
+   * above the typical purchase — are counted once rather than scaled, so a
+   * single big purchase doesn't become a monthly habit.
+   */
   variableBaseline() {
     const today = this.l.today();
     const start = this.dataStart();
     if (!start) return { amount: this.budgetTotal(), basis: this.budgetTotal() ? 'your budgets' : 'no data yet' };
-    const months = [];
-    for (let i = 1; i <= 3; i++) {
+    const end = this.dataEnd();
+    const samples = [];
+    for (let i = 0; i <= 6 && samples.length < 3; i++) {
       const first = monthStart(addMonths(monthStart(today), -i));
-      if (monthEnd(first) < start) break;
-      months.push(this.l.mySpending(first, monthEnd(first), { excludeRecurring: true }).total);
-    }
-    if (months.length) {
-      const avg = Math.round(months.reduce((a, b) => a + b, 0) / months.length);
-      return { amount: avg, basis: `your last ${months.length} month${months.length > 1 ? 's' : ''}` };
-    }
-    // Only the current month exists: extrapolate once there is a week of data.
-    const from = start > monthStart(today) ? start : monthStart(today);
-    const elapsed = Math.max(1, (Date.parse(today) - Date.parse(from)) / 864e5 + 1);
-    const soFar = this.l.mySpending(monthStart(today), today, { excludeRecurring: true }).total;
-    if (elapsed >= 7) {
-      // Extrapolate everyday spending only. Lumpy one-offs (a deposit, a
-      // flight) are counted once — scaling them by 30/7 would invent a
-      // spending habit out of a single purchase.
+      const from = first > start ? first : start;
+      const to = monthEnd(first) < end ? monthEnd(first) : end;
+      if (to < from) continue;
+      const covered = Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
+      if (covered < 7) continue;
       const shares = this.s.expenses
-        .filter((e) => e.date >= monthStart(today) && e.date <= today && !e.recurringId && e.owed[ME])
+        .filter((e) => e.date >= from && e.date <= to && !e.recurringId && e.owed[ME])
         .map((e) => e.owed[ME])
-        .sort((a, b) => a - b);
+        .sort((x, y) => x - y);
+      const total = shares.reduce((x, y) => x + y, 0);
       const median = shares[Math.floor(shares.length / 2)] || 0;
-      const lumpy = shares.filter((v) => shares.length >= 3 && v > 4 * median).reduce((a, b) => a + b, 0);
-      const [y, m] = today.split('-').map(Number);
-      const amount = Math.round(((soFar - lumpy) / elapsed) * daysInMonth(y, m) + lumpy);
-      return { amount, basis: `${Math.round(elapsed)} days of this month` };
+      const lumpy = shares.filter((v) => shares.length >= 3 && v > 4 * median).reduce((x, y) => x + y, 0);
+      const [y, m] = first.split('-').map(Number);
+      const dim = daysInMonth(y, m);
+      samples.push({ est: ((total - lumpy) * dim) / covered + lumpy, covered, full: covered >= dim });
+    }
+    if (samples.length) {
+      const days = samples.reduce((x, s) => x + s.covered, 0);
+      const amount = Math.round(samples.reduce((x, s) => x + s.est * s.covered, 0) / days);
+      const basis = samples.every((s) => s.full) ? `your last ${samples.length} month${samples.length > 1 ? 's' : ''}` : `${days} days of history`;
+      return { amount, basis };
     }
     const b = this.budgetTotal();
+    const soFar = this.l.mySpending(monthStart(today), today, { excludeRecurring: true }).total;
     return { amount: Math.max(b, soFar), basis: b ? 'your budgets' : 'too little data yet' };
   }
+
+  /**
+   * Cash today. The balance from the last statement, rolled forward by every
+   * entry since, less an estimate of everyday spending on days no statement
+   * covers yet (minus anything you logged for those days). The estimate goes
+   * away when the next statement is imported.
+   */
+  cashToday() {
+    const c = this.l.estimatedCash();
+    if (c == null) return { cash: null, gap: 0, since: null };
+    const today = this.l.today();
+    const covered = this.s.cash.date > this.dataEnd() ? this.s.cash.date : this.dataEnd();
+    const since = addDays(covered, 1);
+    if (since > today) return { cash: c, gap: 0, since: null };
+    const days = Math.round((Date.parse(today) - Date.parse(since)) / 864e5) + 1;
+    const daily = (this.variableBaseline().amount * this.s.brain.calibration.factor) / 30.44;
+    const logged = this.l.mySpending(since, today, { excludeRecurring: true }).total;
+    const gap = Math.max(0, Math.round(daily * days - logged));
+    return { cash: c - gap, gap, since };
+  }
+
   budgetTotal() {
     const recurringCats = new Set(this.s.recurring.filter((r) => r.active && r.kind === 'expense').map((r) => r.payload.category));
     return Object.entries(this.s.budgets).filter(([c]) => !recurringCats.has(c)).reduce((a, [, v]) => a + v, 0);
@@ -129,7 +167,8 @@ export class Planner {
     const base = this.variableBaseline();
     const variablePerMonth = Math.round(base.amount * cal.factor);
     const goals = this.goalNeeds();
-    const cashNow = this.l.estimatedCash();
+    const ct = this.cashToday();
+    const cashNow = ct.cash;
     let cash = cashNow ?? 0;
     let reserved = goals.reduce((a, g) => a + g.saved, 0);
     const rows = [];
@@ -167,7 +206,7 @@ export class Planner {
         cumulative: cash - (cashNow ?? 0),
       });
     }
-    return { rows, cashNow, variablePerMonth, basis: base.basis, factor: cal.factor, goals };
+    return { rows, cashNow, cashGap: ct.gap, cashGapSince: ct.since, variablePerMonth, basis: base.basis, factor: cal.factor, goals };
   }
 
   /**
@@ -247,7 +286,7 @@ export class Planner {
     const burn = usualMonth + this.scheduled(nm, monthEnd(nm)).fixed;
     const out = {
       label: monthLabel(monthKey(first)), current, income, bills, goals, spent: spentVar, flow, cash, free,
-      incomeAhead: sched.income, billsAhead: sched.fixed, start, reservedBefore,
+      incomeAhead: sched.income, billsAhead: sched.fixed, start, reservedBefore, cashGap: f.cashGap, cashGapSince: f.cashGapSince, dataEnd: this.dataEnd(),
       perDay: Math.floor(free / Math.max(1, daysLeft)), daysLeft, usual, usualMonth,
       afterUsual: free - usual,
       runwayMonths: cash != null && burn > 0 ? Math.max(0, cash) / burn : null,
@@ -279,19 +318,24 @@ export class Planner {
     const prevFirst = monthStart(addMonths(first, -1));
     const sameDayPrev = addMonths(today, -1);
     const out = [];
+    // Month-to-date comparisons only mean something when the history reaches
+    // today; otherwise the missing days read as a spending drop.
+    const end = this.dataEnd();
+    const upToDate = end >= addDays(today, -3);
+    if (!upToDate) out.push({ level: 'info', text: `Your latest statement ends ${end}; anything after that is estimated until you import the next one.` });
     const now = this.l.mySpending(first, today);
     const prevPace = this.l.mySpending(prevFirst, sameDayPrev).total;
-    if (prevPace > 0) {
+    if (upToDate && prevPace > 0) {
       const d = (now.total - prevPace) / prevPace;
       if (Math.abs(d) >= 0.1) out.push({ level: d > 0 ? 'warn' : 'good', text: `Spending is ${Math.abs(Math.round(d * 100))}% ${d > 0 ? 'higher' : 'lower'} than at this point last month.` });
     }
-    for (const b of this.budgetStatus()) {
+    for (const b of upToDate ? this.budgetStatus() : []) {
       if (b.used > b.budget) out.push({ level: 'bad', text: `Over the ${b.category} budget by ${this.money(b.used - b.budget)}.` });
       else if (!b.onPace) out.push({ level: 'warn', text: `On pace to spend ${this.money(b.projected)} on ${b.category} against a ${this.money(b.budget)} budget.` });
     }
     const inc = this.l.myIncome(prevFirst, monthEnd(prevFirst));
     const spentPrev = this.l.mySpending(prevFirst, monthEnd(prevFirst)).total;
-    if (inc > 0) {
+    if (inc > 0 && end >= monthEnd(prevFirst)) {
       const rate = (inc - spentPrev) / inc;
       out.push({ level: rate >= 0.2 ? 'good' : rate >= 0 ? 'warn' : 'bad', text: `Last month you saved ${Math.round(rate * 100)}% of income${rate < 0.2 ? ' — 20% is a sound floor' : ''}.` });
     }

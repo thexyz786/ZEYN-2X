@@ -47,10 +47,10 @@ export function parseStatement(text, { filename = '' } = {}) {
   for (const m of src.matchAll(/^\s*[-*]?\s*(account|currency|period|opening[_ ]balance|closing[_ ]balance|balance[_ ]date|closing[_ ]date)\s*:\s*(.+?)\s*$/gim))
     meta[m[1].toLowerCase().replace(/ /g, '_')] = m[2];
   const tables = /^\s*\|/m.test(src) ? mdTables(src) : [{ heading: 'transactions', rows: csvRows(src) }];
-  const out = { meta, transactions: [], recurring: [], budgets: [], goals: [] };
+  const out = { meta, transactions: [], recurring: [], budgets: [], goals: [], expected: [] };
   for (const t of tables) {
     const h = t.heading.toLowerCase();
-    const kind = /recurr|bill|subscription/.test(h) ? 'recurring' : /budget/.test(h) ? 'budgets' : /goal/.test(h) ? 'goals' : 'transactions';
+    const kind = /recurr|bill|subscription/.test(h) ? 'recurring' : /budget/.test(h) ? 'budgets' : /goal/.test(h) ? 'goals' : /expect|upcoming/.test(h) ? 'expected' : 'transactions';
     if (kind === 'transactions') out.transactions.push(...t.rows.map(normalizeTxn).filter(Boolean));
     else out[kind].push(...t.rows);
   }
@@ -179,7 +179,7 @@ export function cleanMerchant(raw) {
     .replace(/\b(?:sq|tst|sp|pp|paypal|dd)\s*\*\s*/gi, ' ')
     .replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ')
     .replace(/\+?\d[\d-]{6,}\d/g, ' ') // phone numbers, reference numbers
-    .replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b/gi, ' ') // "RENT OCT" and "RENT NOV" are one payee
+    .replace(/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/gi, ' ') // "RENT OCT" and "RENT NOV" are one payee
     .replace(/#\s?\d+|\b\d{4,}\b|x{2,}\d+/gi, ' ')
     .replace(/\s+[A-Z]{2}\s*$/, ' ') // trailing state code
     .replace(/[*_]+/g, ' ')
@@ -276,6 +276,8 @@ export function applyStatement(parsed, { ledger, brain }) {
   const closing = parsed.meta.closing_balance ? parseSigned(parsed.meta.closing_balance) : null;
   const closingDate = toISODate(parsed.meta.balance_date || parsed.meta.closing_date || '') || rep.to;
   const anchor = closing != null ? { amount: closing, date: closingDate } : last ? { amount: last.balance, date: last.date } : null;
+  // A statement covers through its balance date even if its last row is earlier.
+  if (closing != null && closingDate && (!rep.to || closingDate > rep.to)) rep.to = closingDate;
   if (anchor && anchor.date && (!s.cash || anchor.date >= s.cash.date)) {
     s.cash = anchor;
     rep.cash = anchor;
@@ -295,6 +297,17 @@ export function applyStatement(parsed, { ledger, brain }) {
     rep.goals++;
   }
   for (const r of parsed.recurring) addListedRecurring(ledger, brain, r, rep);
+  // Expected one-off income ("Pell Grant disbursement 2 of 2"), counted by
+  // plans until it arrives and is matched to the real deposit.
+  for (const e of parsed.expected) {
+    const name = pick(e, 'name', 'description', 'source');
+    const amount = parseAmount(pick(e, 'amount'));
+    const date = toISODate(pick(e, 'date', 'expected', 'on'));
+    if (!name || !amount || !date) continue;
+    if (s.recurring.some((r) => r.freq === 'once' && norm(r.label) === norm(name) && r.next === date)) continue;
+    ledger.addRecurring({ kind: 'income', freq: 'once', day: null, start: date < ledger.today() ? ledger.today() : date, payload: { amount, source: name }, label: name });
+    rep.recurring.push({ label: name, amount, freq: 'once', next: date, kind: 'income' });
+  }
   detectRecurring(ledger, rep);
 
   s.imports.push({ at: new Date().toISOString(), account, from: rep.from, to: rep.to, added: rep.added, duplicates: rep.duplicates });
@@ -324,7 +337,8 @@ function reconcile(ledger, kind, t, extra) {
   const hit = list.find((x) => {
     if (!x.recurringId || x.reconciled) return false;
     const days = Math.abs((fromISO(x.date) - fromISO(t.date)) / 864e5);
-    if (days > 6) return false;
+    const once = ledger.state.recurring.find((r) => r.id === x.recurringId)?.freq === 'once';
+    if (days > (once ? 21 : 6)) return false; // an expected one-off can land weeks off its date
     if (Math.abs(x.amount - cents) > Math.max(100, 0.2 * x.amount)) return false;
     const label = kind === 'income' ? x.source : x.description;
     const lk = merchantKey(label);
@@ -356,7 +370,18 @@ function addListedRecurring(ledger, brain, r, rep) {
   const next = toISODate(pick(r, 'next', 'next date')) || nextDate(ledger.today(), freq, day);
   const category = mapCategory(pick(r, 'category')) || brain.predictCategory(name).category;
   const payload = kind === 'income' ? { amount, source: name } : { description: name, amount, paidBy: { [ME]: amount }, owed: { [ME]: amount }, category, groupId: null, method: null };
-  ledger.addRecurring({ kind, freq, day: freq === 'month' ? day || Number(next.slice(8)) : null, start: next, payload, label: name });
+  const rec = ledger.addRecurring({ kind, freq, day: freq === 'month' ? day || Number(next.slice(8)) : null, start: next, payload, label: name });
+  // Past rows of this bill belong to it: they are fixed costs, not everyday
+  // spending, and must not be counted again by the everyday-spending average.
+  const key = merchantKey(name);
+  const list = kind === 'income' ? ledger.state.income : ledger.state.expenses;
+  for (const x of list) {
+    const label = kind === 'income' ? x.source : x.description;
+    if (x.recurringId || x.date >= next || merchantKey(label) !== key) continue;
+    if (Math.abs(x.amount - amount) > Math.max(200, 0.2 * amount)) continue;
+    x.recurringId = rec.id;
+    x.reconciled = true;
+  }
   rep.recurring.push({ label: name, amount, freq, next, kind });
 }
 

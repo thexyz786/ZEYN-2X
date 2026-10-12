@@ -303,6 +303,19 @@ const RULES = [
     return who.length ? { type: 'balanceWith', who } : { type: 'balances' };
   },
 
+  // Money you're expecting: "expect 1849 Pell Grant on Jan 12", "I'll get 500 from freelance in November"
+  (t, c) => {
+    const m = t.match(new RegExp(String.raw`^(?:i\s*)?(?:expect(?:ing)?|am expecting|will get|will receive|'ll get|'ll receive|should get|get)\s+(?:a\s+|my\s+|the\s+)?(${AMT})\s+(.+)$`, 'i'));
+    if (!m) return null;
+    let rest = m[2];
+    const when = findFutureDate(rest, c.today);
+    if (!when) return { type: 'error', message: 'When do you expect it? e.g. “expect 1849 Pell Grant on Jan 12”.' };
+    rest = strip(rest, when.match);
+    const source = rest.replace(/^(?:from|of|as)\s+/i, '').replace(/\b(?:on|in|by|around|the|my|a)\b\s*$/i, '').replace(/\s+/g, ' ').trim() || 'Expected income';
+    const date = when.date < c.today ? c.today : when.date;
+    return { type: 'expect', amount: parseAmount(m[1]), source: cap(unTokenize(source, c)), date };
+  },
+
   // recurring management
   (t) => (/^(?:recurring|bills|subscriptions|(?:show|list) (?:my )?(?:recurring|bills|subscriptions|repeating)(?: (?:bills|expenses|payments))?)\??$/i.test(t) ? { type: 'recurringList' } : null),
   (t, c) => {
@@ -433,6 +446,7 @@ function transferRule(t, c) {
 
 // ── income ─────────────────────────────────────────────────────────────────
 function incomeRule(t, c) {
+  if (/\b(?:will|'ll|going to|expect(?:ing)?|should get)\b/i.test(t)) return null; // future money is "expect", not a record
   if (!/\b(?:earned|earn|salary|paycheck|pay ?check|income|got paid|get paid|was paid|i made|i make|received|receive|bonus|dividends?|interest|refund|cashback|freelance|wages?|side hustle|revenue|commission|tips? earned|stipend|allowance)\b/i.test(t))
     return null;
   if (/\b(?:@p\d+)\b/.test(t) && /\bfrom\s+@p\d+/.test(t)) return null; // money from a friend is a transfer
