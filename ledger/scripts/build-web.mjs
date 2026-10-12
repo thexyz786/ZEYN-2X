@@ -20,6 +20,7 @@ const MODULES = [
   ['./brain.js', 'src/brain.js'],
   ['./parser.js', 'src/parser.js'],
   ['./planner.js', 'src/planner.js'],
+  ['./importer.js', 'src/importer.js'],
   ['./ai.js', 'web/ai-browser.js'],
   ['./assistant.js', 'src/assistant.js'],
 ];

@@ -15,6 +15,7 @@ export function emptyState() {
     budgets: {}, // category -> monthly cents
     recurring: [],
     goals: [],
+    imports: [], // one summary per imported statement: { at, account, from, to, added, skipped }
     cash: null, // { amount, date } — an anchor the planner rolls forward
     brain: {
       categoryWords: {}, // word -> { category: weight }

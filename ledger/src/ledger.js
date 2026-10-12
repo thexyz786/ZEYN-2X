@@ -117,7 +117,7 @@ export class Ledger {
    * paidBy / owed are { personId: cents }. Both must sum to `amount` — the
    * invariant that keeps every balance in the system summing to zero.
    */
-  addExpense({ description, amount, paidBy, owed, date, category = 'general', groupId = null, method = null, recurringId = null }) {
+  addExpense({ description, amount, paidBy, owed, date, category = 'general', groupId = null, method = null, recurringId = null, extra = null }) {
     if (!(amount > 0)) throw new Error('Amount must be greater than zero');
     if (sumValues(paidBy) !== amount) throw new Error('Payers must add up to the total');
     if (sumValues(owed) !== amount) throw new Error('Shares must add up to the total');
@@ -133,6 +133,7 @@ export class Ledger {
       method,
       recurringId,
       createdAt: this.now().toISOString(),
+      ...(extra || {}), // e.g. { origin: 'import', account, fp } for statement rows
     };
     this.state.expenses.push(e);
     return e;
@@ -144,9 +145,9 @@ export class Ledger {
     this.state.transfers.push(t);
     return t;
   }
-  addIncome({ amount, source = 'Income', date, recurringId = null }) {
+  addIncome({ amount, source = 'Income', date, recurringId = null, extra = null }) {
     if (!(amount > 0)) throw new Error('Amount must be greater than zero');
-    const i = { id: this.nextId('i'), date: date || this.today(), amount, source, recurringId, createdAt: this.now().toISOString() };
+    const i = { id: this.nextId('i'), date: date || this.today(), amount, source, recurringId, createdAt: this.now().toISOString(), ...(extra || {}) };
     this.state.income.push(i);
     return i;
   }

@@ -190,7 +190,7 @@ const RULES = [
     return { type: 'budget', category: norm(b).replace(/\s+/g, '-'), amount: parseAmount(a) };
   },
   (t) =>
-    /^budgets?(?:\s+(?:status|check|report))?\??$|\bbudgets?\b.*(?:status|left|remaining|how|check|\?)|how am i doing (?:on|with) (?:my )?budgets?/i.test(t)
+    !hasAmount(t) && /^budgets?(?:\s+(?:status|check|report))?\??$|\bbudgets?\b.*(?:status|left|remaining|how|check|\?)|how am i doing (?:on|with) (?:my )?budgets?/i.test(t)
       ? { type: 'budgetStatus' }
       : null,
 
@@ -216,16 +216,40 @@ const RULES = [
   (t) => (/^(?:goals?|show (?:my )?goals|my goals|savings goals)\??$/i.test(t) ? { type: 'goals' } : null),
 
   // planning
+  // "How much do I have left (this month / next month / for food)?"
   (t, c) => {
-    const m = t.match(/\bcan i (?:afford|buy|get|spend)\b(.*)$|\bis it ok(?:ay)? to (?:buy|spend)\b(.*)$|\bshould i buy\b(.*)$/i);
-    if (!m) return null;
-    let body = m[1] ?? m[2] ?? m[3] ?? '';
+    if (hasAmount(t)) return null;
+    if (!/\b(?:left|remaining|leftover|spare|free to spend|safe to spend|to spend|can i spend|could i spend|do i have|have i got|is left|room)\b/i.test(t)) return null;
+    if (!/\b(?:how much|what|whats|what's|tell me|show)\b/i.test(t) && !/\?$/.test(t)) return null;
+    if (/\bowe|\bowed\b|\bgoal\b/i.test(t)) return null;
+    let offset = 0;
+    if (/\bnext month\b/i.test(t)) offset = 1;
+    else {
+      const f = findFutureDate(t.replace(/\bthis month\b/i, ''), c.today);
+      if (f && /^(?:by|before|in|on|for|until)?\s*[a-z]+/i.test(f.match)) offset = Math.max(0, (Number(f.date.slice(0, 4)) - Number(c.today.slice(0, 4))) * 12 + Number(f.date.slice(5, 7)) - Number(c.today.slice(5, 7)));
+    }
+    const cm = t.match(/\b(?:for|on|in)\s+(?:my\s+|the\s+)?([a-z][\w-]*)(?:\s+budget)?\b/i);
+    let category = null;
+    if (cm) {
+      const w = cm[1].toLowerCase();
+      if (c.categories.includes(w) || w in SEED_CATEGORIES) category = w;
+    }
+    return { type: 'leftover', offset: Math.min(offset, 24), category };
+  },
+  (t, c) => {
+    const AFFORD =
+      /\bcan i (?:afford|buy|get|spend|budget for|fit|swing|manage|pay for)\b|\bdo i have (?:the )?(?:room|space|enough|money|budget|cash)(?: left)?(?: for| to (?:buy|get|spend))?\b|\bis there (?:room|space|budget|money) (?:for|to)\b|\bis it ok(?:ay)? to (?:buy|spend)\b|\bshould i (?:buy|get|spend)\b|\bwould\b.*\b(?:fit|work)\b|\b(?:doable|affordable|realistic)\b|\bafford\b/i;
+    if (!AFFORD.test(t)) return null;
+    let body = t.replace(AFFORD, ' ').replace(/^(?:is|are|would|will)\s+/i, ' ');
     const amt = amountIn(body);
-    if (!amt) return { type: 'error', message: 'How much would it cost? e.g. "can I afford a 1,500 laptop in March?"' };
+    if (!amt) {
+      if (/\bcan i spend\b|\bdo i have\b|\bhow much\b/i.test(t)) return null; // "how much can I spend…" is a what's-left question
+      return { type: 'error', message: 'How much would it cost? e.g. "can I afford a 1,500 laptop in March?"' };
+    }
     body = strip(body, amt.match);
     const when = findFutureDate(body, c.today);
     if (when) body = strip(body, when.match);
-    const what = body.replace(/^(?:a|an|the|to|for|on)\s+/i, '').replace(/\b(?:a|an|the|for|on|right now|now|today)\b/gi, ' ').replace(/[?]/g, '').replace(/\s+/g, ' ').trim();
+    const what = body.replace(/^(?:a|an|the|to|for|on)\s+/i, '').replace(/\b(?:a|an|the|for|on|right now|now|today|it|this|that|i|me|my|buy|get|spend|be|is|are|would|will|in)\b/gi, ' ').replace(/[?]/g, '').replace(/\s+/g, ' ').trim();
     return { type: 'afford', amount: amt.cents, what: what.replace(/"/g, '') || null, date: when?.date ?? null };
   },
   (t) => {
@@ -427,6 +451,9 @@ function incomeRule(t, c) {
 
 // ── expenses ───────────────────────────────────────────────────────────────
 function expenseRule(input, c) {
+  // A question is never a record: "can I budget for a 300 jacket?" must not
+  // log a 300 jacket.
+  if (/\?\s*$/.test(input) || /^\s*(?:can|could|should|would|will|do|does|did|is|are|am|how|what|when|where|which|why)\b/i.test(input)) return null;
   let w = ` ${input} `;
   // A quoted description is taken verbatim (this is how canonical commands and
   // learned templates carry free text that contains numbers or names).

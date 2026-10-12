@@ -4,6 +4,7 @@ import { Planner } from './planner.js';
 import { parse } from './parser.js';
 import { translate as aiTranslate, aiEnabled, AI_OFF_HINT } from './ai.js';
 import { fmt } from './money.js';
+import { looksLikeStatement, parseStatement, applyStatement } from './importer.js';
 import { addDays, addMonths, monthEnd, monthStart, monthLabel, monthKey } from './dates.js';
 
 const MUTATING = new Set([
@@ -41,6 +42,7 @@ export class Assistant {
     const posted = this.ledger.materializeRecurring();
     if (posted.length) this.ledger.persist();
     this.s.brain.stats.messages += 1;
+    if (looksLikeStatement(input)) return this.importStatement(input);
 
     const statements = /^teach\b/i.test(input) ? [input] : input.split(/\s*(?:\n|;)\s*/).filter(Boolean);
     const results = [];
@@ -125,6 +127,34 @@ export class Assistant {
     }
     const tag = source === 'template' ? '\n_(understood from a phrasing I learned earlier)_' : source === 'ai' ? '\n_(new phrasing — learned it, next time I’ll handle it instantly)_' : '';
     return { source, intents, reply: replies.join('\n\n') + tag };
+  }
+
+  /**
+   * Import a bank statement: a Ledger import file (.md) or a bank CSV export.
+   * One undoable step; re-importing the same or an overlapping statement is
+   * safe because rows already present are recognised and skipped.
+   */
+  importStatement(text, filename = '') {
+    const parsed = parseStatement(text, { filename });
+    if (!parsed.transactions.length && !parsed.recurring.length && !parsed.budgets.length && !parsed.goals.length)
+      return { reply: '⚠️ I couldn’t find any transactions in that file. It needs a date, a description and an amount for each row (see IMPORT_FORMAT.md).', results: [] };
+    const rep = this.ledger.transact('import', () => applyStatement(parsed, { ledger: this.ledger, brain: this.brain }));
+    this.ledger.materializeRecurring();
+    this.ledger.persist();
+    const L = [];
+    L.push(`📥 **Imported ${rep.account}**${rep.from ? ` · ${rep.from} → ${rep.to}` : ''}`);
+    L.push(`• ${rep.added} new entr${rep.added === 1 ? 'y' : 'ies'}: spent ${this.m(rep.spent)}, received ${this.m(rep.earned)}${rep.transfers ? `, ${rep.transfers} payment${rep.transfers > 1 ? 's' : ''} with people` : ''}.`);
+    const skipped = [rep.duplicates && `${rep.duplicates} already in the ledger`, rep.internal && `${rep.internal} card payments or moves between your own accounts`].filter(Boolean);
+    if (skipped.length) L.push(`• Skipped ${skipped.join(' and ')}.`);
+    if (rep.reconciled) L.push(`• Matched ${rep.reconciled} scheduled bill${rep.reconciled > 1 ? 's' : ''} to the real amounts.`);
+    if (rep.recurring.length)
+      L.push(`• Scheduled ${rep.recurring.length} repeating item${rep.recurring.length > 1 ? 's' : ''}${rep.recurring.some((r) => r.detected) ? ' (spotted from the pattern)' : ''}: ` +
+        rep.recurring.map((r) => `${r.label} ${this.m(r.amount)}/${r.freq === 'biweek' ? '2 weeks' : r.freq}`).join(', ') + '.');
+    if (rep.cash) L.push(`• Cash on hand set to ${this.m(rep.cash.amount)} as of ${rep.cash.date}; forecasts start from there.`);
+    if (rep.budgets || rep.goals) L.push(`• Added ${rep.budgets} budget${rep.budgets === 1 ? '' : 's'} and ${rep.goals} goal${rep.goals === 1 ? '' : 's'}.`);
+    if (rep.people.length) L.push(`• New people: ${rep.people.join(', ')}.`);
+    L.push('Say **how am I doing** or **forecast** to see where this leaves you; **undo** reverses the whole import.');
+    return { reply: L.join('\n'), results: [{ source: 'import', report: rep }] };
   }
 
   ctx() {
@@ -307,6 +337,8 @@ export class Assistant {
         return this.forecastReply(i.months);
       case 'afford':
         return this.affordReply(i);
+      case 'leftover':
+        return this.leftoverReply(i);
       case 'insights':
         return this.insightsReply();
       case 'recurringList':
@@ -449,14 +481,45 @@ export class Assistant {
   }
   affordReply(i) {
     const a = this.planner.afford(i.amount, i.date);
-    const what = i.what ? ` ${i.what}` : '';
-    const v = { yes: '✅ **Yes**', tight: '🟡 **Tight**', no: '🔴 **Not yet**' }[a.verdict];
-    const basis = a.hasCash ? `free cash (after goal set-asides) in ${a.month}` : `projected surplus by ${a.month}`;
-    const lines = [`${v} — ${this.m(i.amount)}${what}: you’d have ${this.m(a.available)} of ${basis}, leaving ${this.m(a.after)}.`];
-    if (a.verdict === 'tight') lines.push(`That leaves less than one month of spending (${this.m(a.buffer)}) as a cushion.`);
-    if (a.verdict !== 'yes') lines.push(a.fitsBy ? `It fits comfortably by **${a.fitsBy}**.` : 'It doesn’t fit comfortably in the next several months at the current pace.');
-    if (!a.hasCash) lines.push('_Tip: tell me your bank balance for a sharper answer._');
+    const what = i.what ? `the ${this.m(i.amount)} ${i.what}` : this.m(i.amount);
+    const when = a.current ? `the rest of ${a.month}` : a.month;
+    const lines = [];
+    if (a.verdict === 'yes')
+      lines.push(`✅ **Yes** — ${what} fits in ${when}. You’ll have ${this.m(a.free)} free after bills and goal savings; your usual everyday spending takes about ${this.m(a.usual)}, so ${this.m(a.after)} would still be spare afterwards.`);
+    else if (a.verdict === 'tight')
+      lines.push(`🟡 **Tight** — ${what} fits in the ${this.m(a.free)} you’ll have free in ${when}, but leaves ${this.m(a.free - i.amount)} for everyday spending where you usually spend ${this.m(a.usual)}. You’d need to cut about ${this.m(-a.after)} elsewhere that month.`);
+    else lines.push(`🔴 **Not yet** — you’ll have ${this.m(a.free)} free in ${when} after bills and goal savings, ${this.m(i.amount - a.free > 0 ? i.amount - a.free : -a.after)} short of ${what} plus your usual spending.`);
+    if (!a.laterOk) lines.push(`It would also leave you short of your goal savings in ${a.lowMonth}.`);
+    if (a.verdict !== 'yes') lines.push(a.fitsBy ? `It fits comfortably in **${a.fitsBy}**.` : 'It doesn’t fit comfortably in the next six months at the current pace.');
+    if (!a.hasCash) lines.push('_Tip: tell me your bank balance (or import a statement) for a sharper answer._');
     return lines.join('\n');
+  }
+  leftoverReply(i) {
+    const r = this.planner.leftover(i.offset, i.category);
+    const when = r.current ? `the rest of ${r.label}` : r.label;
+    if (r.category) {
+      const c = r.category;
+      if (c.budget == null)
+        return `You’ve spent ${this.m(c.used)} on ${c.name} ${r.current ? 'so far this month' : 'in ' + r.label}. There’s no ${c.name} budget yet — set one with “budget 300 for ${c.name}”.`;
+      return c.left >= 0
+        ? `**${this.m(c.left)} left** in your ${c.name} budget for ${when} (${this.m(c.used)} of ${this.m(c.budget)} used).`
+        : `🔴 You’re **${this.m(-c.left)} over** your ${c.name} budget for ${r.label} (${this.m(c.used)} of ${this.m(c.budget)}).`;
+    }
+    const L = [];
+    const head = r.free >= 0 ? `**${this.m(r.free)} free to spend** in ${when}` : `🔴 **${this.m(-r.free)} short** for ${when}`;
+    L.push(`${head}${r.free > 0 ? ` — about ${this.m(r.perDay)}/day for ${r.daysLeft} days` : ''}.`);
+    L.push(
+      r.cash != null
+        ? `That’s ${r.current ? 'your cash today' : `your projected cash at the start of ${r.label}`} (${this.m(r.start)})${r.reservedBefore ? `, less ${this.m(r.reservedBefore)} already set aside for goals` : ''}${r.incomeAhead ? `, plus ${this.m(r.incomeAhead)} of expected income` : ''}, minus ${this.m(r.billsAhead)} of bills${r.goals ? ` and ${this.m(r.goals)} of goal saving` : ''} through the end of ${r.label}.`
+        : `Income ${this.m(r.income)} − bills ${this.m(r.bills)}${r.goals ? ` − goal savings ${this.m(r.goals)}` : ''}${r.spent ? ` − already spent ${this.m(r.spent)}` : ''}.`,
+    );
+    if (r.usual > 0)
+      L.push(r.afterUsual >= 0
+        ? `At your usual pace (${this.m(r.usual)} of everyday spending) you’d finish with ${this.m(r.afterUsual)} to spare.`
+        : `🟡 Your usual everyday spending (${this.m(r.usual)}) is more than that — trim about ${this.m(-r.afterUsual)} or it comes out of savings.`);
+    if (r.cash != null && r.runwayMonths != null && r.runwayMonths < 24) L.push(`At your usual monthly spend, your cash lasts about ${r.runwayMonths.toFixed(1)} months without new income.`);
+    if (r.cash == null) L.push('_Tell me your bank balance or import a statement and this becomes an exact cash answer._');
+    return L.join('\n');
   }
   insightsReply() {
     const items = this.planner.insights();
@@ -564,6 +627,10 @@ export const HELP = `**Tell me what happened, in plain words.** Examples:
 • save 10000 for a car by June 2027 · add 500 to car
 • forecast 12 months · can I afford a 1500 laptop in March?
 • how am I doing · how much did I spend last month · budgets
+
+**Bank statements**
+• paste a statement here, or press Import on the web page (a Ledger import .md, or your bank’s .csv)
+• re-importing is safe: rows already in the ledger are skipped, and repeating bills are scheduled
 
 **Teach me**
 • Al is also called Ali · categorize chipotle as food

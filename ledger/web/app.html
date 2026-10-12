@@ -60,7 +60,11 @@
   textarea { flex: 1; min-width: 0; resize: none; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font: inherit; background: var(--bg); color: var(--ink); min-height: 42px; max-height: 140px; }
   textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   button.send { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 0 18px; font: 700 14px var(--font-ui); cursor: pointer; }
-  button.send:disabled { opacity: 0.5; cursor: progress; }
+  button.send:disabled, button.ghost:disabled { opacity: 0.5; cursor: progress; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; font: 600 13px var(--font-ui); cursor: pointer; }
+  button.ghost:hover { border-color: var(--accent); }
+  #chat { position: relative; }
+  .drop { position: absolute; inset: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--ink); border: 2px dashed var(--accent); border-radius: 10px; font-weight: 600; z-index: 2; padding: 16px; text-align: center; }
   .side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .side .wide { grid-column: 1 / -1; }
   @media (max-width: 640px) { .side { grid-template-columns: 1fr; } }
@@ -99,7 +103,10 @@
   <section class="card" id="chat" aria-label="Conversation">
     <div id="log" role="log" aria-live="polite"></div>
     <div class="chips" id="chips"></div>
+    <div class="drop" id="drop" hidden>Drop a statement (.md or bank .csv) to import it</div>
     <form id="form">
+      <input type="file" id="file" accept=".md,.csv,.txt,.markdown" multiple hidden>
+      <button class="ghost" id="importBtn" type="button" title="Import a bank statement (.md import file or bank .csv)" disabled>Import</button>
       <textarea id="input" rows="1" placeholder="I paid 120 for dinner with Ali and Sara" autocomplete="off" aria-label="Tell the ledger what happened"></textarea>
       <button class="send" id="send" type="submit" disabled>Send</button>
     </form>
@@ -196,7 +203,7 @@ const md = (s) => esc(s)
   .replace(/(^|\s)_(.+?)_(?=\s|$)/gm, '$1<em>$2</em>')
   .replace(/`([^`]+)`/g, '<code>$1</code>');
 
-const CHIPS = ['help', 'balances', 'how am I doing', 'forecast 12 months', 'simplify', 'budgets', 'what have you learned', 'undo'];
+const CHIPS = ["what's left this month", "what's left next month", 'how am I doing', 'forecast 12 months', 'balances', 'budgets', 'what have you learned', 'undo', 'help'];
 $('chips').innerHTML = CHIPS.map((c) => `<button class="chip" type="button">${esc(c)}</button>`).join('');
 $('chips').addEventListener('click', (e) => { if (e.target.matches('.chip') && ready) send(e.target.textContent); });
 
@@ -215,7 +222,8 @@ async function send(text) {
   if (!text || busy) return;
   busy = true;
   $('send').disabled = true;
-  bubble(text, 'me');
+  const lines = text.split('\n').length;
+  bubble(lines > 4 ? `Pasted statement (${lines} lines)` : text, 'me');
   const pending = bubble('…', 'bot');
   try {
     const r = await assistant.handle(text);
@@ -230,6 +238,35 @@ async function send(text) {
   $('input').focus();
 }
 $('form').addEventListener('submit', (e) => { e.preventDefault(); if (!ready) return; const t = $('input').value; $('input').value = ''; send(t); });
+// Statements: the Import button, drag-and-drop onto the chat, or pasting the
+// file's text straight into the message box all go through the same importer.
+async function importFiles(files) {
+  if (!ready || busy || !files.length) return;
+  busy = true;
+  $('send').disabled = $('importBtn').disabled = true;
+  for (const f of files) {
+    bubble(`Import ${f.name}`, 'me');
+    const pending = bubble('Reading the statement…', 'bot');
+    try {
+      const text = await f.text();
+      const r = assistant.importStatement(text, f.name);
+      pending.innerHTML = md(r.reply);
+    } catch (err) {
+      pending.innerHTML = md(`⚠️ ${err.message}`);
+    }
+  }
+  render();
+  busy = false;
+  $('send').disabled = $('importBtn').disabled = false;
+}
+$('importBtn').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', (e) => { importFiles([...e.target.files]); e.target.value = ''; });
+let dragDepth = 0;
+$('chat').addEventListener('dragenter', (e) => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); dragDepth++; $('drop').hidden = false; } });
+$('chat').addEventListener('dragover', (e) => { if (e.dataTransfer?.types?.includes('Files')) e.preventDefault(); });
+$('chat').addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+$('chat').addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('drop').hidden = true; importFiles([...(e.dataTransfer?.files || [])]); });
+
 $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } });
 
 function render() {
@@ -332,11 +369,11 @@ async function boot() {
   assistant = new Engine.Assistant(store);
   if (assistant.ledger.materializeRecurring().length) assistant.ledger.persist(); // bills that came due while away
   ready = true;
-  $('send').disabled = false;
+  $('send').disabled = $('importBtn').disabled = false;
   render();
   const first = !assistant.s.expenses.length && !assistant.s.transfers.length && !assistant.s.income.length;
   bubble(first
-    ? 'Tell me what happened in plain words — **I paid 120 for dinner with Ali and Sara**, **Ali paid me back 20**, **salary 5200 every month on the 1st**, **can I afford a 1500 laptop in March?** Type **help** for everything I understand.'
+    ? 'Tell me what happened in plain words — **I paid 120 for dinner with Ali and Sara**, **Ali paid me back 20**, **salary 5200 every month on the 1st**, **can I afford a 1500 laptop in March?** To load your history, press **Import** and choose a statement (a Ledger import .md or your bank’s .csv). Type **help** for everything I understand.'
     : 'Welcome back. Ask **how am I doing**, **balances**, or just tell me what happened.', 'bot');
 }
 boot();

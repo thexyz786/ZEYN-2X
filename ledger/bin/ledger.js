@@ -3,9 +3,11 @@
 //   ledger                      interactive chat in the terminal
 //   ledger "I paid 60 for dinner with Ali"   one command, then exit
 //   ledger serve [--port 4747]  web app at http://localhost:4747
+//   ledger import <file...>     import bank statements (.md import file or bank .csv)
 // Data lives in ./data/ledger.json unless LEDGER_DATA points elsewhere.
 
 import readline from 'node:readline';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Assistant } from '../src/assistant.js';
@@ -28,6 +30,15 @@ if (args[0] === 'serve') {
     console.log(`Ledger running at http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
     console.log(`Data: ${dataFile} · AI fallback: ${aiEnabled() ? 'on' : 'off'}`);
   });
+} else if (args[0] === 'import') {
+  if (args.length < 2) {
+    console.error('Usage: ledger import <statement.md|statement.csv> [...]');
+    process.exit(1);
+  }
+  for (const file of args.slice(1)) {
+    const r = assistant.importStatement(fs.readFileSync(file, 'utf8'), path.basename(file));
+    console.log(plain(r.reply) + '\n');
+  }
 } else if (args.length) {
   const r = await assistant.handle(args.join(' '));
   console.log(plain(r.reply));
