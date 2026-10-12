@@ -23,6 +23,7 @@ const MODULES = [
   ['./importer.js', 'src/importer.js'],
   ['./ai.js', 'web/ai-browser.js'],
   ['./assistant.js', 'src/assistant.js'],
+  ['./copilot.js', 'src/copilot.js'],
 ];
 
 function wrap(spec, file) {
@@ -42,7 +43,8 @@ function wrap(spec, file) {
 }
 
 const bundle = `const __mods = {};\n${MODULES.map(([s, f]) => wrap(s, f)).join('\n\n')}\nconst Engine = __mods['./assistant.js'];\nconst AI = __mods['./ai.js'];
-const State = __mods['./state.js'];`;
+const State = __mods['./state.js'];
+const CopilotMod = __mods['./copilot.js'];`;
 const html = read('web/app.html').replace('/*__ENGINE__*/', () => bundle);
 const out = process.argv[2] || path.join(root, 'dist', 'ledger.html');
 fs.mkdirSync(path.dirname(out), { recursive: true });

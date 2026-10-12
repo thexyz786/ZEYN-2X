@@ -115,6 +115,10 @@ const RULES = [
       ? { type: 'brain' }
       : null,
 
+  (t) => {
+    const m = t.match(/^(?:forget|remove|delete|drop)\s+lesson\s+#?(\d+)$/i);
+    return m ? { type: 'forgetLesson', n: Number(m[1]) } : null;
+  },
   // teach "phrase" = "command"  — explicit phrasing lesson
   (t, c) => {
     const m = c.raw.match(/^teach(?: me)?:?\s+"(.+?)"\s*(?:=|means|->|=>|is)\s*"?(.+?)"?$/i);

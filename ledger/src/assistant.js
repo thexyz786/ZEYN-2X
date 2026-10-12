@@ -7,9 +7,9 @@ import { fmt } from './money.js';
 import { looksLikeStatement, parseStatement, applyStatement } from './importer.js';
 import { addDays, addMonths, monthEnd, monthStart, monthLabel, monthKey } from './dates.js';
 
-const MUTATING = new Set([
+export const MUTATING = new Set([
   'expense', 'transfer', 'income', 'recurring', 'expect', 'settle', 'delete', 'budget', 'goal', 'contribute',
-  'cash', 'currency', 'group', 'friends', 'alias', 'teachCategory', 'stopRecurring',
+  'cash', 'currency', 'group', 'friends', 'forgetLesson', 'alias', 'teachCategory', 'stopRecurring',
 ]);
 
 /**
@@ -157,6 +157,21 @@ export class Assistant {
     return { reply: L.join('\n'), results: [{ source: 'import', report: rep }] };
   }
 
+  /**
+   * Run canonical commands (from a confirmed Claude proposal) as ONE undoable
+   * step. Every command must parse; nothing is written if any doesn't.
+   */
+  runCommands(commands) {
+    const intents = commands.map((c) => parse(c, this.ctx()));
+    const bad = commands.find((c, k) => !intents[k] || intents[k].type === 'error');
+    if (bad) throw new Error(`I couldn’t turn “${bad}” into an entry.`);
+    const mutating = intents.some((i) => MUTATING.has(i.type));
+    const run = () => intents.map((i, k) => this.execute(i, commands[k]));
+    const replies = mutating ? this.ledger.transact('confirmed', run) : run();
+    this.ledger.persist();
+    return { intents, replies };
+  }
+
   ctx() {
     return {
       today: this.ledger.today(),
@@ -289,6 +304,11 @@ export class Assistant {
       }
       case 'teach':
         return this.teach(i);
+      case 'forgetLesson': {
+        const lessons = this.s.brain.copilot?.lessons || [];
+        const gone = lessons.splice(i.n - 1, 1)[0];
+        return gone ? `🧠 Forgot lesson ${i.n}: “${gone.text}”.` : `There’s no lesson ${i.n}. Say “what have you learned” to see them.`;
+      }
       case 'currency':
         this.s.currency = i.code;
         return `Currency set to ${i.code}.`;
@@ -559,6 +579,7 @@ export class Assistant {
       aliases.length ? `• Nicknames: ${aliases.join(', ')}.` : null,
       `• Forecast self-correction: ×${b.calibration.factor.toFixed(2)} from ${b.calibration.history.filter((h) => h.actual != null).length} scored month(s).`,
       `• AI fallback: ${aiEnabled() ? 'on' : `off (${AI_OFF_HINT})`}.`,
+      ...copilotLines(b.copilot),
       b.misses.length ? `• Recent misses (teach me with: teach "phrase" = "command"):\n${b.misses.slice(-5).map((m) => `   – “${m.text}”`).join('\n')}` : null,
     ];
     return lines.filter(Boolean).join('\n');
@@ -612,8 +633,18 @@ export class Assistant {
 // an injected translator (tests, embedding) always is.
 const aiAvailable = (fn) => fn !== aiTranslate || aiEnabled();
 
+function copilotLines(c) {
+  if (!c) return [];
+  const st = c.stats || {};
+  const out = [];
+  if (st.confirmed || st.cancelled)
+    out.push(`• Claude’s readings: ${st.confirmed} confirmed (${st.firstTry} right first time, ${st.corrected} after a correction), ${st.cancelled} cancelled; ${c.examples.length} examples remembered.`);
+  if (c.lessons.length) out.push(`• Lessons Claude follows (say “forget lesson 2” to drop one):\n${c.lessons.map((l, k) => `   ${k + 1}. ${l.text}`).join('\n')}`);
+  return out;
+}
+
 /** Free-text fields of parsed intents — candidates for template text slots. */
-const freeTexts = (intents) =>
+export const freeTexts = (intents) =>
   intents.flatMap((p) => [p.description, p.source, p.name, p.what, p.inner?.description, p.inner?.source]).filter(Boolean);
 
 export const HELP = `**Tell me what happened, in plain words.** Examples:

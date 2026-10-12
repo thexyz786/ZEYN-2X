@@ -23,6 +23,8 @@ export function emptyState() {
       misses: [], // phrases nothing understood (for review / teaching)
       calibration: { factor: 1, history: [] }, // forecast vs. actual
       stats: { messages: 0, ruleHits: 0, templateHits: 0, aiHits: 0, learned: 0, misses: 0, undos: 0 },
+      // Claude-first chat: confirmed examples and standing lessons it is shown each time.
+      copilot: { examples: [], lessons: [], stats: { proposals: 0, confirmed: 0, firstTry: 0, corrected: 0, cancelled: 0, questions: 0 } },
     },
   };
 }

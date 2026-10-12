@@ -61,6 +61,29 @@ network you trust: the server has no login.
 
 Separate statements with `;` or new lines to send several at once.
 
+## Claude-first chat (web page)
+
+With **Claude: on** (the default when the page runs inside claude.ai), every
+message goes to Claude along with your real numbers: cash, what's left this
+month and next, bills, budgets, goals, balances and recent entries
+(`src/copilot.js`).
+
+- **Questions** are answered with your figures. When Claude needs an exact
+  number it calls the app through a read-only `ledger_query` tool.
+- **Records** come back as a proposal that spells out what Claude
+  understood, such as "$34.50 · Trader Joe's · groceries · you paid · today",
+  with **Confirm / Change / Cancel**. Nothing is saved until you confirm.
+  Confirmed commands run through the same deterministic parser as
+  everything else, as one undoable step.
+- **Learning:** each confirmed message is stored as an example, and Claude
+  sees the most similar ones next time. Each correction or stated preference
+  becomes a lesson that Claude follows every time; "forget lesson N" removes
+  one. The offline reader also learns the phrasing, and "what have you
+  learned" shows how often the first reading was right.
+
+The quick-reply buttons, undo, help, history, delete and statement imports
+stay local and instant. Switch Claude off to use only the built-in reader.
+
 ## How it improves itself
 
 1. **Learned phrasings.** The first time it sees a sentence shape it can't

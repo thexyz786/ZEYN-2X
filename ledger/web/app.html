@@ -64,6 +64,18 @@
   button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); border-radius: 8px; padding: 0 12px; font: 600 13px var(--font-ui); cursor: pointer; }
   button.ghost:hover { border-color: var(--accent); }
   #chat { position: relative; }
+  .confirm { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; display: grid; gap: 6px; white-space: normal; }
+  .confirm ul { margin: 0; padding-left: 18px; }
+  .confirm li { font-weight: 600; }
+  .confirm .btns { display: flex; gap: 6px; flex-wrap: wrap; }
+  .confirm button { border-radius: 7px; padding: 5px 12px; font: 600 13px var(--font-ui); cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .confirm button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .confirm .state { color: var(--muted); font-size: 13px; }
+  .msg .lookup { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+  .stop { margin-left: 8px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 6px; padding: 1px 8px; font: 12px var(--font-ui); cursor: pointer; }
+  .mode { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 11px; font: 600 12px var(--font-ui); cursor: pointer; }
+  .mode[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  [hidden] { display: none !important; }
   .drop { position: absolute; inset: 0; display: grid; place-items: center; background: var(--accent-soft); color: var(--ink); border: 2px dashed var(--accent); border-radius: 10px; font-weight: 600; z-index: 2; padding: 16px; text-align: center; }
   .side { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .side .wide { grid-column: 1 / -1; }
@@ -103,6 +115,7 @@
   <section class="card" id="chat" aria-label="Conversation">
     <div id="log" role="log" aria-live="polite"></div>
     <div class="chips" id="chips"></div>
+    <div class="chips"><button class="mode" id="mode" type="button" aria-pressed="false" hidden>Claude: off</button><span class="muted small" id="modeNote"></span></div>
     <div class="drop" id="drop" hidden>Drop a statement (.md or bank .csv) to import it</div>
     <form id="form">
       <input type="file" id="file" accept=".md,.csv,.txt,.markdown" multiple hidden>
@@ -205,7 +218,81 @@ const md = (s) => esc(s)
 
 const CHIPS = ["what's left this month", "what's left next month", 'how am I doing', 'forecast 12 months', 'balances', 'budgets', 'what have you learned', 'undo', 'help'];
 $('chips').innerHTML = CHIPS.map((c) => `<button class="chip" type="button">${esc(c)}</button>`).join('');
-$('chips').addEventListener('click', (e) => { if (e.target.matches('.chip') && ready) send(e.target.textContent); });
+$('chips').addEventListener('click', (e) => { if (e.target.matches('.chip') && ready) send(e.target.textContent, { local: true }); });
+
+// ── Claude-first chat ──────────────────────────────────────────────────────
+// With Claude on, every message goes to Claude with the ledger's numbers;
+// records come back as a proposal to confirm. App commands (undo, help,
+// history, delete, statements, the quick buttons) stay local and instant.
+let copilot = null, claudeOn = false, currentCard = null, ctl = null, samplerRef = null;
+// (An undo or delete while a proposal is open leaves the proposal as it is.)
+const LOCAL_RE = /^(?:undo|help|history|activity|what have you learned|forget lesson \d+|delete\b|remove\b|recurring|bills)\b/i;
+function setClaude(on, note = '') {
+  claudeOn = Boolean(on && copilot);
+  AI.setSampler(claudeOn ? samplerRef : null); // off means no Claude usage at all
+  $('mode').hidden = !copilot;
+  $('mode').setAttribute('aria-pressed', String(claudeOn));
+  $('mode').textContent = claudeOn ? 'Claude: on' : 'Claude: off';
+  $('modeNote').textContent = note || (claudeOn ? 'Messages go to Claude; you confirm before anything is saved.' : copilot ? 'Offline: the built-in reader handles messages.' : '');
+  try { localStorage.setItem('zeyn-claude', claudeOn ? 'on' : 'off'); } catch {}
+}
+$('mode').addEventListener('click', () => setClaude(!claudeOn));
+
+function confirmCard(bubbleEl, actions) {
+  const box = document.createElement('div');
+  box.className = 'confirm';
+  box.innerHTML = `<div class="state">Is this right?</div><ul>${actions.map((a) => `<li>${esc(a.summary)}</li>`).join('')}</ul><div class="btns"><button class="primary" type="button" data-a="ok">Confirm</button><button type="button" data-a="fix">Change</button><button type="button" data-a="no">Cancel</button></div>`;
+  bubbleEl.appendChild(box);
+  currentCard = box;
+  box.addEventListener('click', (e) => {
+    const act = e.target.dataset?.a;
+    if (!act || box !== currentCard) return;
+    if (act === 'ok') {
+      try {
+        const replies = copilot.confirm();
+        box.innerHTML = `<div class="state">✓ Saved</div><div>${md((replies || []).join('\n'))}</div>`;
+      } catch (err) {
+        box.innerHTML = `<div class="state">⚠️ ${esc(err.message)}</div>`;
+      }
+      currentCard = null;
+      render();
+    } else if (act === 'no') {
+      copilot.cancel();
+      box.innerHTML = '<div class="state">Cancelled — nothing saved.</div>';
+      currentCard = null;
+    } else {
+      box.querySelector('.state').textContent = 'Tell me what to change below.';
+      $('input').placeholder = 'What should change? e.g. “it was 40, and Ali paid”';
+      $('input').focus();
+    }
+    $('log').scrollTop = $('log').scrollHeight;
+  });
+  return box;
+}
+
+async function askClaude(text, pending) {
+  ctl = new AbortController();
+  pending.innerHTML = 'Claude is reading… <button class="stop" type="button">Stop</button>';
+  pending.querySelector('.stop').onclick = () => ctl.abort();
+  if (currentCard) { currentCard.querySelector('.btns')?.remove(); currentCard = null; }
+  try {
+    const r = await copilot.ask(text, { signal: ctl.signal });
+    pending.innerHTML = md(r.reply + (r.question && !r.reply.includes(r.question) ? `\n${r.question}` : ''));
+    for (const q of r.queries) { const d = document.createElement('span'); d.className = 'lookup'; d.textContent = q; pending.appendChild(d); }
+    if (r.actions.length) confirmCard(pending, r.actions);
+    $('input').placeholder = 'I paid 120 for dinner with Ali and Sara';
+  } catch (e) {
+    const code = e?.code;
+    if (code === 'cancelled') pending.innerHTML = md('_Stopped._');
+    else if (['not_granted', 'sampling_disabled', 'not_declared', 'capability_disabled', 'capability_removed'].includes(code)) {
+      copilot = null;
+      setClaude(false, 'Claude isn’t available here, so the built-in reader is answering.');
+      const r = await assistant.handle(text);
+      pending.innerHTML = md(r.reply);
+    } else if (code === 'rate_limited') pending.innerHTML = md('Claude is busy or you’ve hit your usage limit. Try again in a moment, or switch Claude off to use the built-in reader.');
+    else pending.innerHTML = md(`Claude couldn’t answer just now${e?.message ? ` (${e.message})` : ''}. Send it again, or switch Claude off to use the built-in reader.`);
+  }
+}
 
 function bubble(text, who) {
   const d = document.createElement('div');
@@ -217,7 +304,7 @@ function bubble(text, who) {
 }
 
 let busy = false;
-async function send(text) {
+async function send(text, { local = false } = {}) {
   text = text.trim();
   if (!text || busy) return;
   busy = true;
@@ -226,8 +313,12 @@ async function send(text) {
   bubble(lines > 4 ? `Pasted statement (${lines} lines)` : text, 'me');
   const pending = bubble('…', 'bot');
   try {
-    const r = await assistant.handle(text);
-    pending.innerHTML = md(r.reply);
+    const viaClaude = claudeOn && copilot && !local && !LOCAL_RE.test(text) && lines <= 4;
+    if (viaClaude) await askClaude(text, pending);
+    else {
+      const r = await assistant.handle(text);
+      pending.innerHTML = md(r.reply);
+    }
   } catch (err) {
     pending.innerHTML = md(`⚠️ ${err.message}`);
   }
@@ -344,6 +435,7 @@ async function boot() {
   render();
   const use = (name) => (window.claude?.use ? window.claude.use(name).catch(() => null) : Promise.resolve(null));
   const [db, user, sample] = await Promise.all([use('db'), use('user'), use('sample')]);
+  samplerRef = sample;
   if (sample) AI.setSampler(sample);
   let state = null;
   try {
@@ -367,14 +459,20 @@ async function boot() {
   const store = new PageStore(state);
   store.onSave = (s) => saver && saver(s);
   assistant = new Engine.Assistant(store);
+  if (sample) {
+    copilot = new CopilotMod.Copilot(assistant, sample);
+    let pref = 'on';
+    try { pref = localStorage.getItem('zeyn-claude') || 'on'; } catch {}
+    setClaude(pref !== 'off');
+  }
   if (assistant.ledger.materializeRecurring().length) assistant.ledger.persist(); // bills that came due while away
   ready = true;
   $('send').disabled = $('importBtn').disabled = false;
   render();
   const first = !assistant.s.expenses.length && !assistant.s.transfers.length && !assistant.s.income.length;
   bubble(first
-    ? 'Tell me what happened in plain words — **I paid 120 for dinner with Ali and Sara**, **Ali paid me back 20**, **salary 5200 every month on the 1st**, **can I afford a 1500 laptop in March?** To load your history, press **Import** and choose a statement (a Ledger import .md or your bank’s .csv). Type **help** for everything I understand.'
-    : 'Welcome back. Ask **how am I doing**, **balances**, or just tell me what happened.', 'bot');
+    ? (claudeOn ? 'Claude reads every message here and shows you exactly what it understood before anything is saved. ' : '') + 'Tell me what happened in plain words — **I paid 120 for dinner with Ali and Sara**, **Ali paid me back 20**, **salary 5200 every month on the 1st**, **can I afford a 1500 laptop in March?** To load your history, press **Import** and choose a statement (a Ledger import .md or your bank’s .csv). Type **help** for everything I understand.'
+    : 'Welcome back. Ask **what’s left this month**, **can I afford…**, or just tell me what happened' + (claudeOn ? ' — Claude will confirm the details with you before saving.' : '.'), 'bot');
 }
 boot();
 </script>
