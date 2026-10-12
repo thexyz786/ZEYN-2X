@@ -125,7 +125,9 @@
     </form>
   </section>
   <section class="side">
-    <div class="card"><h2>Balances</h2><div id="balances"></div></div>
+    <div class="card"><h2>Accounts</h2><div id="accounts"></div></div>
+    <div class="card"><h2>Coming up</h2><div id="upcoming"></div></div>
+    <div class="card"><h2>Balances with people</h2><div id="balances"></div></div>
     <div class="card"><h2 id="monthTitle">This month</h2><div id="month"></div></div>
     <div class="card wide"><h2>Forecast</h2><div id="forecast"></div></div>
     <div class="card"><h2>Goals</h2><div id="goals"></div></div>
@@ -370,6 +372,13 @@ function render() {
     ...(d.cash != null ? [['Cash (est.)', money(d.cash), d.cash < 0 ? 'neg' : '']] : []),
   ].map(([k, v, c]) => `<div>${esc(k)}<b class="${c}">${v}</b></div>`).join('');
 
+  $('accounts').innerHTML = d.accounts.length
+    ? d.accounts.map((a) => `<div class="row small"><span>${esc(a.name)}<br><span class="muted">${esc(a.type)}${a.spendable ? ' · spendable' : ''} · ${esc(a.asOf)}</span></span><span class="${/credit/.test(a.type) ? 'neg' : ''}">${/credit/.test(a.type) ? 'owe ' : ''}${money(Math.abs(a.balance))}</span></div>`).join('') +
+      (d.cash != null ? `<div class="row small"><span><b>Free cash today</b>${d.cashInfo?.owedOnCards ? '<br><span class="muted">after card balances owed</span>' : ''}</span><span><b>${money(d.cash)}</b></span></div>` : '')
+    : '<div class="empty">Import your foundation file to see every account here.</div>';
+  $('upcoming').innerHTML = d.upcoming.length
+    ? d.upcoming.map((r) => `<div class="row small"><span>${r.kind === 'income' ? 'In · ' : 'Out · '}${esc(r.label)}<br><span class="muted">${esc(r.next)}</span></span><span class="${r.kind === 'income' ? 'pos' : 'neg'}">${r.kind === 'income' ? '+' : '−'}${money(r.payload.amount)}</span></div>`).join('')
+    : '<div class="empty">Expected aid, refunds and planned purchases show here. Try <b>expect 1849 Pell Grant on Jan 12</b>.</div>';
   const bals = d.balances.filter((b) => b.amount);
   $('balances').innerHTML = bals.length
     ? bals.map((b) => `<div class="row"><span>${esc(b.name)}</span><span class="${b.amount > 0 ? 'pos' : 'neg'}">${b.amount > 0 ? 'owes you ' : 'you owe '}${money(Math.abs(b.amount))}</span></div>`).join('')
@@ -472,7 +481,7 @@ async function boot() {
   const first = !assistant.s.expenses.length && !assistant.s.transfers.length && !assistant.s.income.length;
   bubble(first
     ? (claudeOn ? 'Claude reads every message here and shows you exactly what it understood before anything is saved. ' : '') + 'Tell me what happened in plain words — **I paid 120 for dinner with Ali and Sara**, **Ali paid me back 20**, **salary 5200 every month on the 1st**, **can I afford a 1500 laptop in March?** To load your history, press **Import** and choose a statement (a Ledger import .md or your bank’s .csv). Type **help** for everything I understand.'
-    : 'Welcome back. Ask **what’s left this month**, **can I afford…**, or just tell me what happened' + (claudeOn ? ' — Claude will confirm the details with you before saving.' : '.'), 'bot');
+    : (assistant.s.openQuestions?.length ? `Before we start, a few things your files didn’t settle — answer any of them here:\n${assistant.s.openQuestions.map((q) => `– ${q}`).join('\n')}\n\n` : '') + 'Welcome back. Ask **what’s left this month**, **can I afford…**, or just tell me what happened' + (claudeOn ? ' — Claude will confirm the details with you before saving.' : '.'), 'bot');
 }
 boot();
 </script>

@@ -16,6 +16,10 @@ export function emptyState() {
     recurring: [],
     goals: [],
     imports: [], // one summary per imported statement: { at, account, from, to, added, skipped }
+    accounts: [], // from import files: { name, type, balance, asOf, spendable, itemised, note }
+    payees: {}, // payee rules from import files: merchantKey -> { name, category, kind, note }
+    profile: '', // the user's situation and priorities, as the import file states them
+    openQuestions: [], // things the import couldn't settle; the chat asks about them
     cash: null, // { amount, date } — an anchor the planner rolls forward
     brain: {
       categoryWords: {}, // word -> { category: weight }

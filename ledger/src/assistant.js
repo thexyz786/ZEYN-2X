@@ -143,6 +143,8 @@ export class Assistant {
     this.ledger.persist();
     const L = [];
     L.push(`📥 **Imported ${rep.account}**${rep.from ? ` · ${rep.from} → ${rep.to}` : ''}`);
+    if (rep.replaced) L.push(`• Replaced the earlier imported baseline (${rep.replaced.entries} entries, ${rep.replaced.schedules} schedules); things you entered in chat were kept.`);
+    if (rep.accounts.length) L.push(`• Accounts: ${rep.accounts.map((a) => `${a.name} ${this.m(a.balance)}${/credit/.test(a.type) ? ' owed' : ''}`).join(', ')}.`);
     L.push(`• ${rep.added} new entr${rep.added === 1 ? 'y' : 'ies'}: spent ${this.m(rep.spent)}, received ${this.m(rep.earned)}${rep.transfers ? `, ${rep.transfers} payment${rep.transfers > 1 ? 's' : ''} with people` : ''}.`);
     const skipped = [rep.duplicates && `${rep.duplicates} already in the ledger`, rep.internal && `${rep.internal} card payments or moves between your own accounts`].filter(Boolean);
     if (skipped.length) L.push(`• Skipped ${skipped.join(' and ')}.`);
@@ -153,6 +155,9 @@ export class Assistant {
     if (rep.cash) L.push(`• Cash on hand set to ${this.m(rep.cash.amount)} as of ${rep.cash.date}; forecasts start from there.`);
     if (rep.budgets || rep.goals) L.push(`• Added ${rep.budgets} budget${rep.budgets === 1 ? '' : 's'} and ${rep.goals} goal${rep.goals === 1 ? '' : 's'}.`);
     if (rep.people.length) L.push(`• New people: ${rep.people.join(', ')}.`);
+    const learned = [rep.payees && `${rep.payees} payee rule${rep.payees > 1 ? 's' : ''}`, rep.rules && `${rep.rules} standing rule${rep.rules > 1 ? 's' : ''} for Claude`, rep.profile && 'your profile'].filter(Boolean);
+    if (learned.length) L.push(`• Learned ${learned.join(', ')}.`);
+    if (rep.questions.length) L.push(`**Open questions** — answer any of these in the chat and I’ll remember:\n${rep.questions.map((q) => `   – ${q}`).join('\n')}`);
     L.push('Say **how am I doing** or **forecast** to see where this leaves you; **undo** reverses the whole import.');
     return { reply: L.join('\n'), results: [{ source: 'import', report: rep }] };
   }
@@ -247,6 +252,7 @@ export class Assistant {
       }
       case 'expect': {
         const r = L.addRecurring({ kind: 'income', freq: 'once', day: null, start: i.date, payload: { amount: i.amount, source: i.source }, label: i.source });
+        r.origin = 'chat';
         const posted = L.materializeRecurring();
         return posted.length
           ? `💰 Recorded ${this.m(i.amount)} from ${i.source} on ${i.date}. \`${r.id}\``
@@ -264,6 +270,7 @@ export class Assistant {
           label = inner.description;
         }
         const r = L.addRecurring({ kind: inner.type, freq: i.freq, day: i.day, start: i.start, payload, label });
+        r.origin = 'chat';
         const posted = L.materializeRecurring();
         const every = { month: 'month', week: 'week', biweek: 'two weeks', year: 'year' }[i.freq];
         const share = inner.type === 'expense' && payload.owed[ME] !== payload.amount ? ` · your share ${this.m(payload.owed[ME] || 0)}` : '';
@@ -621,7 +628,12 @@ export class Assistant {
       goals: this.planner.goalNeeds(),
       forecast: f,
       cash: this.planner.cashToday().cash,
-      recurring: this.s.recurring.filter((r) => r.active),
+      recurring: this.s.recurring.filter((r) => r.active && r.freq !== 'once'),
+      upcoming: this.s.recurring.filter((r) => r.active && r.freq === 'once').sort((a, b) => (a.next < b.next ? -1 : 1)),
+      accounts: this.s.accounts || [],
+      cashInfo: this.s.cash,
+      openQuestions: this.s.openQuestions || [],
+      profile: Boolean(this.s.profile),
       insights: this.planner.insights(),
       activity: this.historyReply(12),
       brain: { stats: this.s.brain.stats, templates: this.s.brain.templates.length, words: Object.keys(this.s.brain.categoryWords).length, factor: this.s.brain.calibration.factor, ai: aiEnabled() },

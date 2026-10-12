@@ -1,42 +1,55 @@
 # Ledger import format
 
-Ledger reads two kinds of statement:
+Zeyn Ledger reads three kinds of file:
 
-1. **Your bank's CSV export**, as downloaded. Chase checking and credit-card
-   activity files work as they are. Any CSV with a date, a description and
-   either an amount or debit/credit columns works too.
-2. **A Ledger import file (`.md`)**, described below. Use it when you want to
-   bring in several accounts at once, mark shared expenses, or include
-   budgets, goals and bills. The prompt in `PROJECT_PROMPT.md` produces this
-   file from a folder of statements.
+1. **A foundation file** (`mode: replace`): the complete picture from your
+   project files. Importing it replaces everything imported earlier. What you
+   entered in the chat is kept.
+2. **An update file** (`mode: add`, the default): new statements on top of
+   the foundation. Rows the ledger already has are skipped, and scheduled
+   bills are replaced by the real charges.
+3. **A bank CSV export as downloaded**, such as Chase checking or card
+   activity. It's read like an update.
 
-You can import as often as you like. Rows that are already in the ledger are
-skipped, and a scheduled bill is replaced by the real charge when that charge
-arrives in a statement.
+`PROJECT_PROMPT.md` has the prompts that produce the first two from the USA
+ACCOUNT BUDGET project.
 
-## File layout
+## Layout
 
 ```markdown
 # Ledger import
-account: Chase Checking 0078
+mode: replace
 currency: USD
-period: 2026-07-01 to 2026-10-08
-closing_balance: 4210.55
-balance_date: 2026-10-08
+as_of: 2026-10-08
+
+## Profile
+You are a student at … Your rent of $850 is due on the 1st …
+
+## Accounts
+| name | type | balance | as of | spendable | note |
+|---|---|---|---|---|---|
+| Chase Checking 0078 | checking | 3253.48 | 2026-10-08 | yes | |
+| Chase Card 0742 | credit | 240.47 | 2026-10-05 | | owed |
+| BQHC Savings | savings | 420.00 | 2026-10-08 | no | |
 
 ## Transactions
 | date | account | description | amount | category | kind | note |
 |---|---|---|---|---|---|---|
-| 2026-10-01 | Chase Checking 0078 | Rent October | -900.00 | housing | expense | |
-| 2026-10-02 | Chase Checking 0078 | Trader Joe's | -80.00 | groceries | split:Ali | shared with roommate |
-| 2026-10-04 | Chase Checking 0078 | Zelle from Ali | 25.00 | | transfer:Ali | his utilities share |
-| 2026-10-05 | Chase Checking 0078 | Payment to Chase card | -200.00 | | internal | |
-| 2026-10-06 | Chase Checking 0078 | LACC refund | 1200.00 | aid | income | |
+| 2026-10-01 | Chase Checking 0078 | Rent | -850.00 | housing | expense | |
+| 2026-10-03 | Chase Card 0742 | Trader Joe's | -34.50 | groceries | expense | |
+| 2026-10-05 | Chase Checking 0078 | Chase card payment | -240.47 | | internal | |
+| 2026-10-05 | Chase Card 0742 | Payment from checking | 240.47 | | internal | |
 
 ## Recurring
-| name | amount | frequency | day | kind | category |
-|---|---|---|---|---|---|
-| Rent | 900 | monthly | 1 | expense | housing |
+| name | amount | frequency | day | kind | category | next |
+|---|---|---|---|---|---|---|
+| Rent | 850 | monthly | 1 | expense | housing | 2026-11-01 |
+
+## Expected
+| name | amount | date | kind | category |
+|---|---|---|---|---|
+| Pell Grant disbursement 2 of 2 | 1849 | 2027-01-20 | income | aid |
+| Mumbai ticket | 1150 | 2026-12-01 | expense | travel |
 
 ## Budgets
 | category | monthly |
@@ -46,50 +59,53 @@ balance_date: 2026-10-08
 ## Goals
 | name | target | deadline | saved |
 |---|---|---|---|
-| Mumbai ticket | 1400 | 2026-12-15 | 300 |
+| Emergency fund | 1000 | 2027-05-31 | 200 |
+
+## Payees
+| payee | category | kind | note |
+|---|---|---|---|
+| BQHC | savings | expense | own savings |
+| Xoom | transfers-abroad | expense | to own Axis account |
+
+## People
+| name | aliases | note |
+|---|---|---|
+| Ali | Ali R, 803 | roommate |
+
+## Rules
+- BQHC is my own savings; transfers to it are savings, not spending.
+
+## Open questions
+- Who is the $84 Zelle on Sep 1 to "803" for?
 ```
 
-## Header lines
+## Sections
 
-All header lines are optional.
+| Section | Columns | What the app does with it |
+|---|---|---|
+| Profile | free text | Claude reads it before every answer. |
+| Accounts | name, type (checking, savings, credit, cash, foreign), balance (for credit: amount owed), as of, spendable (yes/no), note | Cash for planning = spendable balances − balances owed on cards whose purchases are listed. |
+| Transactions | date, account, description, amount (negative = out), category, kind, note | History, spending pace, balances with people. |
+| Recurring | name, amount, frequency, day, kind, category, next | Scheduled into future months; estimates are matched to the real charge later. |
+| Expected | name, amount, date, kind (income/expense), category | One-off money in or out, counted in the month it lands. |
+| Budgets | category, monthly | Budget status. |
+| Goals | name, target, deadline, saved | Monthly set-aside toward each goal. |
+| Payees | payee, category, kind, note | Files future rows from that payee automatically. |
+| People | name, aliases, note | Names and nicknames. |
+| Rules | bulleted lines | Standing instructions Claude follows in the chat. |
+| Open questions | bulleted lines | Shown when you open the app; answers become rules. |
 
-| Line | Meaning |
-|---|---|
-| `account:` | Default account name for rows that have no `account` cell. |
-| `closing_balance:` | The account's balance at the end of the statement. It becomes the starting cash for forecasts. Give it for your main checking account only. |
-| `balance_date:` | The date that balance is from, as YYYY-MM-DD. |
-
-## Transactions table
-
-- **date**: YYYY-MM-DD. US dates (MM/DD/YYYY) are also accepted.
-- **amount**: negative for money out, positive for money in. Leave out
-  currency symbols and thousands separators.
-- **description**: the payee, cleaned up (for example "Trader Joe's", not
-  "POS DEBIT 10/03 TRADER JOE S #123").
-- **category**: optional. Use one of: food, groceries, transport, housing,
-  utilities, subscriptions, entertainment, travel, shopping, health,
-  education, personal, fees, gifts, services, aid. Categories you give teach
-  the app, so later rows from the same payee are filed the same way.
-- **kind**: optional. If you leave it out, the app works it out from the sign
-  and the description.
+### Transaction kinds
 
 | kind | Use it for |
 |---|---|
-| `expense` | Your own spending. |
-| `income` | Pay, aid, refunds, interest. |
-| `internal` | Credit-card payments and moves between your own accounts. These are skipped, so nothing is counted twice. |
-| `transfer:Name` | Money sent to (negative) or received from (positive) a person, such as a loan or repayment. It changes your balance with that person, not your spending. |
-| `split:Name1,Name2` | A bill you paid that is shared equally with those people. Your share counts as spending, and theirs is recorded as owed to you. |
-| `skip` | Ignore this row. |
+| `expense` | Your spending, including savings at another bank, transfers abroad, and card payments when the card's purchases aren't listed. |
+| `income` | Aid, grants, pay, refunds, interest. |
+| `internal` | A move between two accounts that both appear in the file. Both sides are skipped. |
+| `transfer:Name` | Money sent to (negative) or received from (positive) a person. |
+| `split:Name1,Name2` | A bill you paid that is shared equally with those people. |
+| `skip` | Ignore the row. |
 
-## Optional sections
-
-- **Recurring** (`name, amount, frequency, day, kind, category, next`): bills and
-  pay you already know about. `frequency` is one of weekly, biweekly, monthly
-  or yearly. Bills that repeat in your history are detected without being
-  listed here.
-- **Expected** (`name, amount, date`): one-off money that's coming, such as
-  the second disbursement of a grant. Plans count it until the deposit
-  arrives in a statement, which then replaces it.
-- **Budgets** (`category, monthly`).
-- **Goals** (`name, target, deadline, saved`).
+Categories: food, groceries, transport, housing, utilities, subscriptions,
+entertainment, travel, shopping, health, education, personal, fees, gifts,
+services, aid, income, savings, transfers-abroad, card.

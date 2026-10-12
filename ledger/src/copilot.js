@@ -50,6 +50,8 @@ export class Copilot {
     const a = this.a, L = a.ledger, P = a.planner, s = a.s;
     const today = L.today();
     const lines = [`Today: ${today}. Currency: ${s.currency}.`];
+    if (s.accounts?.length)
+      lines.push('Accounts: ' + s.accounts.map((x) => `${x.name} (${x.type}${x.spendable ? ', spendable' : ''}) ${this.m(x.balance)}${/credit/.test(x.type) ? ' owed' : ''} as of ${x.asOf}${x.note ? ` — ${x.note}` : ''}`).join('; ') + '.');
     const ct = P.cashToday();
     if (ct.cash != null)
       lines.push(`Cash today (estimated): ${this.m(ct.cash)}${ct.gap ? ` — includes ${this.m(ct.gap)} of estimated everyday spending since the last statement (${P.dataEnd()})` : ''}.`);
@@ -83,6 +85,8 @@ export class Copilot {
       .sort((x, y) => (x.d < y.d ? 1 : -1))
       .slice(0, 25);
     if (recent.length) lines.push('Recent entries (newest first):\n' + recent.map((r) => `  ${r.d} ${r.t}`).join('\n'));
+    if (s.openQuestions?.length)
+      lines.push(`Open questions from the last import (if the user's message answers one, propose the correction and give the answer as a lesson):\n${s.openQuestions.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`);
     return lines.join('\n');
   }
 
@@ -118,13 +122,14 @@ Ledger commands you can propose (one command per action; quote multi-word descri
 ${GRAMMAR}
 Corrections: "delete e12" removes an entry (ids appear in the app); to change one, delete it and record the corrected version.
 
-${lessons.length ? `What you have learned about this user — follow these:\n${lessons.map((l, i) => `${i + 1}. ${l.text}`).join('\n')}\n\n` : ''}${examples.length ? `How this user's earlier messages were confirmed:\n${examples.map((e) => `- "${e.text}" → ${e.commands.map((c) => `"${c}"`).join(' + ')}`).join('\n')}\n\n` : ''}Their data:
+${this.a.s.profile ? `About this user, in their own files (use it to make answers fit them):\n${this.a.s.profile}\n\n` : ''}${lessons.length ? `What you have learned about this user — follow these:\n${lessons.map((l, i) => `${i + 1}. ${l.text}`).join('\n')}\n\n` : ''}${examples.length ? `How this user's earlier messages were confirmed:\n${examples.map((e) => `- "${e.text}" → ${e.commands.map((c) => `"${c}"`).join(' + ')}`).join('\n')}\n\n` : ''}Their data:
 ${this.facts()}
 
 Reply with only a JSON object:
-{"reply": "what you say to them", "actions": [{"command": "a ledger command", "summary": "the one-line echo they confirm"}], "question": "", "lesson": ""}
+{"reply": "what you say to them", "actions": [{"command": "a ledger command", "summary": "the one-line echo they confirm"}], "question": "", "lesson": "", "resolved": []}
 - "actions": [] for questions and when you need to ask something.
 - "question": a short clarifying question, or "".
+- "resolved": numbers of open questions this message answers, else [].
 - "lesson": when this message (or their correction of your earlier reading) teaches something durable about how they talk or want things recorded — a nickname, a merchant's category, a preference — state it as one short rule. Otherwise "".`;
   }
 
@@ -172,6 +177,11 @@ Reply with only a JSON object:
       out.actions = out.actions.filter((x) => validCommand(x.command, this.a));
     }
 
+    // Answered open questions leave the list (the answer itself lives on as a lesson).
+    if (out.resolved.length && this.a.s.openQuestions?.length) {
+      const drop = new Set(out.resolved.map((n) => n - 1));
+      this.a.s.openQuestions = this.a.s.openQuestions.filter((_, i) => !drop.has(i));
+    }
     // Read-only commands Claude put in actions just run; they need no confirmation.
     const queries = [];
     const records = [];
@@ -220,6 +230,7 @@ Reply with only a JSON object:
         .slice(0, 8),
       question: String(raw?.question || '').trim(),
       lesson: String(raw?.lesson || '').trim().slice(0, 240),
+      resolved: (Array.isArray(raw?.resolved) ? raw.resolved : []).map(Number).filter((n) => n >= 1),
     };
   }
 

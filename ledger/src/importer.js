@@ -44,17 +44,63 @@ export function looksLikeStatement(text) {
 export function parseStatement(text, { filename = '' } = {}) {
   const src = String(text || '').replace(/\r\n?/g, '\n');
   const meta = {};
-  for (const m of src.matchAll(/^\s*[-*]?\s*(account|currency|period|opening[_ ]balance|closing[_ ]balance|balance[_ ]date|closing[_ ]date)\s*:\s*(.+?)\s*$/gim))
+  // Header lines only (before the first section), so "account:" inside a
+  // profile paragraph is never mistaken for the file's default account.
+  const head = src.split(/^\s*##\s/m)[0];
+  for (const m of head.matchAll(/^\s*[-*]?\s*(account|currency|period|mode|as[_ ]of|opening[_ ]balance|closing[_ ]balance|balance[_ ]date|closing[_ ]date)\s*:\s*(.+?)\s*$/gim))
     meta[m[1].toLowerCase().replace(/ /g, '_')] = m[2];
   const tables = /^\s*\|/m.test(src) ? mdTables(src) : [{ heading: 'transactions', rows: csvRows(src) }];
-  const out = { meta, transactions: [], recurring: [], budgets: [], goals: [], expected: [] };
+  const out = {
+    meta, transactions: [], recurring: [], budgets: [], goals: [], expected: [],
+    accounts: [], people: [], payees: [], rules: [], profile: '', questions: [],
+  };
   for (const t of tables) {
-    const h = t.heading.toLowerCase();
-    const kind = /recurr|bill|subscription/.test(h) ? 'recurring' : /budget/.test(h) ? 'budgets' : /goal/.test(h) ? 'goals' : /expect|upcoming/.test(h) ? 'expected' : 'transactions';
+    const kind = sectionKind(t.heading);
     if (kind === 'transactions') out.transactions.push(...t.rows.map(normalizeTxn).filter(Boolean));
-    else out[kind].push(...t.rows);
+    else if (kind === 'rules' || kind === 'questions') out[kind].push(...t.rows.map((r) => Object.values(r).filter(Boolean).join(' — ')));
+    else if (kind !== 'profile') out[kind].push(...t.rows);
+  }
+  // Prose sections: the profile is kept as written; rules and open questions
+  // are one item per bullet or numbered line.
+  for (const sec of textSections(src)) {
+    const kind = sectionKind(sec.heading);
+    if (kind === 'profile') out.profile = sec.body.replace(/^\s*\|.*$/gm, '').trim().slice(0, 4000);
+    if (kind === 'rules' || kind === 'questions')
+      for (const line of sec.body.split('\n')) {
+        const m = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.+)$/);
+        if (m) out[kind].push(m[1].trim());
+      }
   }
   if (!meta.account && filename) meta.account = filename.replace(/\.[a-z]+$/i, '').replace(/_activity.*$/i, '');
+  return out;
+}
+
+function sectionKind(heading) {
+  const h = String(heading).toLowerCase();
+  if (/recurr|bills?\b|subscription/.test(h)) return 'recurring';
+  if (/budget/.test(h)) return 'budgets';
+  if (/goal/.test(h)) return 'goals';
+  if (/expect|upcoming|planned|future/.test(h)) return 'expected';
+  if (/account/.test(h)) return 'accounts';
+  if (/people|contacts|who/.test(h)) return 'people';
+  if (/payee|merchant/.test(h)) return 'payees';
+  if (/rule|preference|instruction/.test(h)) return 'rules';
+  if (/profile|about me|about|situation|context/.test(h)) return 'profile';
+  if (/question|unclear|to confirm/.test(h)) return 'questions';
+  return 'transactions';
+}
+
+/** Each "## heading" with the text under it. */
+function textSections(src) {
+  const out = [];
+  let cur = null;
+  for (const line of src.split('\n')) {
+    const hm = line.match(/^\s*#{2,6}\s+(.+)$/);
+    if (hm) {
+      cur = { heading: hm[1], body: '' };
+      out.push(cur);
+    } else if (cur) cur.body += line + '\n';
+  }
   return out;
 }
 
@@ -204,8 +250,31 @@ export const merchantKey = (d) => norm(d).replace(/[^a-z ]/g, '').split(' ').fil
  */
 export function applyStatement(parsed, { ledger, brain }) {
   const s = ledger.state;
-  const account = parsed.meta.account || 'Bank';
-  const rep = { account, added: 0, income: 0, spent: 0, earned: 0, internal: 0, duplicates: 0, reconciled: 0, transfers: 0, people: [], recurring: [], cash: null, from: null, to: null, budgets: 0, goals: 0 };
+  const rowAccounts = [...new Set(parsed.transactions.map((t) => t.account).filter(Boolean))];
+  const account = parsed.meta.account || (rowAccounts.length ? rowAccounts.slice(0, 3).join(', ') : 'Bank');
+  const rep = {
+    account, added: 0, income: 0, spent: 0, earned: 0, internal: 0, duplicates: 0, reconciled: 0, transfers: 0, people: [], recurring: [], cash: null,
+    from: null, to: null, budgets: 0, goals: 0, replaced: null, accounts: [], payees: 0, rules: 0, profile: false, questions: [],
+  };
+  if (/^replace/i.test(parsed.meta.mode || '')) rep.replaced = resetImported(ledger);
+
+  // Payee rules first, so the rows below are categorised by them.
+  s.payees ??= {};
+  for (const p of parsed.payees) {
+    const name = pick(p, 'payee', 'name', 'merchant', 'description');
+    const category = mapCategory(pick(p, 'category'));
+    const kind = pick(p, 'kind').toLowerCase() || null;
+    if (!name || (!category && !kind)) continue;
+    s.payees[merchantKey(cleanMerchant(name))] = { name, category, kind, note: pick(p, 'note', 'notes') || null };
+    if (category) brain.learnCategory(cleanMerchant(name), category, 5);
+    rep.payees++;
+  }
+  for (const p of parsed.people) {
+    const name = pick(p, 'name');
+    if (!name) continue;
+    const id = ensurePerson(ledger, name, rep);
+    for (const a of pick(p, 'aliases', 'alias', 'aka').split(/\s*[,;/]\s*/).filter(Boolean)) ledger.addAlias(id, a);
+  }
 
   // Fingerprints of what is already in the ledger.
   const seen = new Set([...s.expenses, ...s.income, ...s.transfers].map((x) => x.fp).filter(Boolean));
@@ -227,6 +296,9 @@ export function applyStatement(parsed, { ledger, brain }) {
       continue;
     }
     const extra = { origin: 'import', account: t.account || account, fp };
+    const rule = payeeRule(s, t);
+    if (rule && !t.category && rule.category) t.category = rule.category;
+    if (rule && !t.kind && rule.kind) t.kind = rule.kind;
     const kind = t.kind || (INTERNAL_RE.test(t.raw) ? 'internal' : t.amount > 0 && REFUND_RE.test(t.raw) ? 'refund' : t.amount < 0 ? 'expense' : 'income');
     if (kind === 'internal' || kind === 'skip') {
       rep.internal++;
@@ -283,6 +355,61 @@ export function applyStatement(parsed, { ledger, brain }) {
     rep.cash = anchor;
   }
 
+  // Accounts: balances per account. Cash for planning = spendable balances
+  // (checking, cash) − what is owed on credit cards whose purchases are
+  // itemised here. A card whose purchases are NOT itemised has its payments
+  // counted as spending instead, so its balance is not subtracted again.
+  if (parsed.accounts.length) {
+    s.accounts ??= [];
+    const itemised = new Set(parsed.transactions.map((t) => t.account).filter(Boolean));
+    for (const a of parsed.accounts) {
+      const name = pick(a, 'name', 'account');
+      const bal = pick(a, 'balance');
+      if (!name || bal === '') continue;
+      const type = (pick(a, 'type') || 'checking').toLowerCase();
+      const spendableCell = pick(a, 'spendable', 'counts as spendable').toLowerCase();
+      const acct = {
+        name, type,
+        balance: parseSigned(bal),
+        asOf: toISODate(pick(a, 'as of', 'as_of', 'date')) || rep.to || ledger.today(),
+        spendable: spendableCell ? /^(y|yes|true)/.test(spendableCell) : /checking|cash/.test(type),
+        itemised: itemised.has(name),
+        note: pick(a, 'note', 'notes') || null,
+      };
+      const i = s.accounts.findIndex((x) => norm(x.name) === norm(name));
+      if (i >= 0) s.accounts[i] = acct;
+      else s.accounts.push(acct);
+      rep.accounts.push(acct);
+    }
+    const cashAccts = s.accounts.filter((a) => a.spendable && !/credit/.test(a.type) && a.balance != null);
+    if (cashAccts.length) {
+      const date = cashAccts.map((a) => a.asOf).sort().at(-1);
+      const owed = s.accounts.filter((a) => /credit/.test(a.type) && a.itemised && a.balance != null).reduce((x, a) => x + Math.abs(a.balance), 0);
+      const amount = cashAccts.reduce((x, a) => x + a.balance, 0) - owed;
+      if (!s.cash || date >= s.cash.date || rep.replaced) {
+        s.cash = { amount, date, owedOnCards: owed };
+        rep.cash = s.cash;
+      }
+      if (!rep.to || date > rep.to) rep.to = date;
+    }
+  }
+
+  // Standing rules become lessons Claude follows; the profile is the context
+  // it reads first; open questions are put to you in the chat.
+  const co = (s.brain.copilot ??= { examples: [], lessons: [], stats: {} });
+  for (const r of parsed.rules) {
+    const text = r.replace(/\s+/g, ' ').trim();
+    if (!text || co.lessons.some((l) => l.text.toLowerCase() === text.toLowerCase())) continue;
+    co.lessons.push({ text, from: 'import', at: ledger.today() });
+    rep.rules++;
+  }
+  if (co.lessons.length > 60) co.lessons.splice(0, co.lessons.length - 60);
+  if (parsed.profile) (s.profile = parsed.profile), (rep.profile = true);
+  if (parsed.questions.length) {
+    s.openQuestions = [...new Set([...(rep.replaced ? [] : s.openQuestions || []), ...parsed.questions])].slice(-30);
+    rep.questions = parsed.questions;
+  }
+
   // Optional sections from an import file.
   for (const b of parsed.budgets) {
     const cat = mapCategory(pick(b, 'category'));
@@ -292,7 +419,16 @@ export function applyStatement(parsed, { ledger, brain }) {
   for (const g of parsed.goals) {
     const name = pick(g, 'name', 'goal');
     const target = parseAmount(pick(g, 'target', 'amount'));
-    if (!name || !target || s.goals.some((x) => norm(x.name) === norm(name))) continue;
+    if (!name || !target) continue;
+    const existing = s.goals.find((x) => norm(x.name) === norm(name));
+    if (existing) {
+      existing.target = target;
+      existing.deadline = toISODate(pick(g, 'deadline', 'by')) || existing.deadline;
+      const saved = parseAmount(pick(g, 'saved'));
+      if (saved != null) existing.saved = saved;
+      rep.goals++;
+      continue;
+    }
     s.goals.push({ id: ledger.nextId('G'), name, target, saved: parseAmount(pick(g, 'saved')) || 0, deadline: toISODate(pick(g, 'deadline', 'by')), createdAt: new Date().toISOString() });
     rep.goals++;
   }
@@ -304,15 +440,51 @@ export function applyStatement(parsed, { ledger, brain }) {
     const amount = parseAmount(pick(e, 'amount'));
     const date = toISODate(pick(e, 'date', 'expected', 'on'));
     if (!name || !amount || !date) continue;
-    if (s.recurring.some((r) => r.freq === 'once' && norm(r.label) === norm(name) && r.next === date)) continue;
-    ledger.addRecurring({ kind: 'income', freq: 'once', day: null, start: date < ledger.today() ? ledger.today() : date, payload: { amount, source: name }, label: name });
-    rep.recurring.push({ label: name, amount, freq: 'once', next: date, kind: 'income' });
+    if (s.recurring.some((r) => r.active && r.freq === 'once' && norm(r.label) === norm(name))) continue;
+    const kind = /expense|spend|purchase|pay|bill|cost|out/.test(pick(e, 'kind', 'type').toLowerCase()) ? 'expense' : 'income';
+    const start = date < ledger.today() ? ledger.today() : date;
+    const category = mapCategory(pick(e, 'category')) || (kind === 'expense' ? brain.predictCategory(name).category : null);
+    const payload = kind === 'income' ? { amount, source: name } : { description: name, amount, paidBy: { [ME]: amount }, owed: { [ME]: amount }, category, groupId: null, method: null };
+    const rec = ledger.addRecurring({ kind, freq: 'once', day: null, start, payload, label: name });
+    rec.origin = 'import';
+    rep.recurring.push({ label: name, amount, freq: 'once', next: date, kind });
   }
   detectRecurring(ledger, rep);
 
   s.imports.push({ at: new Date().toISOString(), account, from: rep.from, to: rep.to, added: rep.added, duplicates: rep.duplicates });
   if (s.imports.length > 100) s.imports.shift();
   return rep;
+}
+
+function payeeRule(s, t) {
+  if (!s.payees) return null;
+  const k = merchantKey(t.description);
+  if (s.payees[k]) return s.payees[k];
+  for (const [key, rule] of Object.entries(s.payees)) if (key && k.startsWith(key)) return rule;
+  return null;
+}
+
+/**
+ * "mode: replace" — the file is the new complete baseline. Remove everything
+ * earlier imports created (entries, schedules and the estimates they posted,
+ * accounts, imported rules); keep what you typed in chat and what was learned.
+ */
+function resetImported(ledger) {
+  const s = ledger.state;
+  const dropRec = new Set(s.recurring.filter((r) => r.origin !== 'chat').map((r) => r.id));
+  const before = s.expenses.length + s.income.length + s.transfers.length;
+  const keep = (x) => x.origin !== 'import' && !(x.recurringId && dropRec.has(x.recurringId));
+  s.expenses = s.expenses.filter(keep);
+  s.income = s.income.filter(keep);
+  s.transfers = s.transfers.filter(keep);
+  s.recurring = s.recurring.filter((r) => !dropRec.has(r.id));
+  s.accounts = [];
+  s.cash = null;
+  s.imports = [];
+  s.openQuestions = [];
+  const co = s.brain.copilot;
+  if (co) co.lessons = co.lessons.filter((l) => l.from !== 'import');
+  return { entries: before - (s.expenses.length + s.income.length + s.transfers.length), schedules: dropRec.size };
 }
 
 function parseSigned(v) {
@@ -362,7 +534,17 @@ function addListedRecurring(ledger, brain, r, rep) {
   const name = pick(r, 'name', 'description');
   const amount = parseAmount(pick(r, 'amount'));
   if (!name || !amount) return;
-  if (ledger.state.recurring.some((x) => x.active && norm(x.label) === norm(name))) return;
+  const existing = ledger.state.recurring.find((x) => x.active && norm(x.label) === norm(name));
+  if (existing) {
+    // A newer statement can change a bill's amount; keep the schedule, update the amount.
+    existing.payload.amount = amount;
+    if (existing.kind === 'expense') {
+      const ids = Object.keys(existing.payload.owed);
+      existing.payload.owed = ids.length === 1 ? { [ids[0]]: amount } : ledger.shares(amount, ids, { type: 'shares', values: existing.payload.owed });
+      existing.payload.paidBy = { [Object.keys(existing.payload.paidBy)[0]]: amount };
+    }
+    return;
+  }
   const freqWord = pick(r, 'frequency', 'every').toLowerCase();
   const freq = /week/.test(freqWord) ? (/bi|two|2/.test(freqWord) ? 'biweek' : 'week') : /year|annual/.test(freqWord) ? 'year' : 'month';
   const kind = /income/.test(pick(r, 'kind', 'type').toLowerCase()) ? 'income' : 'expense';
@@ -371,6 +553,7 @@ function addListedRecurring(ledger, brain, r, rep) {
   const category = mapCategory(pick(r, 'category')) || brain.predictCategory(name).category;
   const payload = kind === 'income' ? { amount, source: name } : { description: name, amount, paidBy: { [ME]: amount }, owed: { [ME]: amount }, category, groupId: null, method: null };
   const rec = ledger.addRecurring({ kind, freq, day: freq === 'month' ? day || Number(next.slice(8)) : null, start: next, payload, label: name });
+  rec.origin = 'import';
   // Past rows of this bill belong to it: they are fixed costs, not everyday
   // spending, and must not be counted again by the everyday-spending average.
   const key = merchantKey(name);
@@ -432,6 +615,7 @@ function detectRecurring(ledger, rep) {
     const next = advance({ freq, day }, lastX.date);
     const payload = kind === 'income' ? { amount: amt, source: label } : { description: label, amount: amt, paidBy: { [ME]: amt }, owed: { [ME]: amt }, category: lastX.category, groupId: null, method: lastX.method };
     const r = ledger.addRecurring({ kind, freq, day, start: next, payload, label });
+    r.origin = 'import';
     for (const x of xs) x.recurringId = r.id, (x.reconciled = true);
     rep.recurring.push({ label, amount: amt, freq, next, kind, detected: true });
   }
