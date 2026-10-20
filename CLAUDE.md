@@ -19,4 +19,4 @@ every line here is read at the start of every session.
 
 ## History
 
-Earlier material is archived at tag `archive/v1`. Consult it only when asked.
+Earlier material is archived at commit `e840687`. Consult it only when asked.
